@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.0.0"
-    CURRENT_PROJECT_VERSION: "200"
+    MARKETING_VERSION: "2.0.1"
+    CURRENT_PROJECT_VERSION: "201"
 packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
@@ -33,6 +33,7 @@ targets:
     resources:
       - path: Castmind/Resources/Assets.xcassets
       - path: Castmind/Resources/PrivacyInfo.xcprivacy
+      - path: Castmind/Resources/LaunchScreen.storyboard
     info:
       path: Castmind/Resources/Info.plist
     settings:

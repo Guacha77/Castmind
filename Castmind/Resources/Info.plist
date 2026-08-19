@@ -11,7 +11,8 @@
     <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
-    <key>UILaunchScreen</key><dict/>
+    <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
+    <key>UIRequiresFullScreen</key><true/>
     <key>UISupportedInterfaceOrientations</key>
     <array><string>UIInterfaceOrientationPortrait</string></array>
     <key>UIApplicationSceneManifest</key>
