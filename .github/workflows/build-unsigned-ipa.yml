@@ -45,8 +45,9 @@ jobs:
           test -d Castmind.xcodeproj
           xcodebuild -list -project Castmind.xcodeproj
 
-          /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' Castmind/Resources/Info.plist | grep -qx 'LaunchScreen'
+          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' Castmind/Resources/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' Castmind/Resources/Info.plist | grep -qx 'true'
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' Castmind/Resources/Info.plist >/dev/null
           /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' Castmind/Resources/Info.plist | grep -qx 'LaunchBackground'
 
           xcodebuild -showBuildSettings \
@@ -119,9 +120,10 @@ jobs:
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
           file "$APP_PATH/$EXECUTABLE"
+          file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O.*arm64'
 
-          LAUNCH_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$APP_PATH/Info.plist")"
-          test "$LAUNCH_NAME" = "LaunchScreen"
+          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$APP_PATH/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$APP_PATH/Info.plist" >/dev/null
           FULL_SCREEN="$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_PATH/Info.plist")"
           test "$FULL_SCREEN" = "true"
           COLOR_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' "$APP_PATH/Info.plist")"
@@ -131,8 +133,6 @@ jobs:
             test -n "$value"
             echo "$permission=$value"
           done
-          find "$APP_PATH" -name 'LaunchScreen.storyboardc' -print | grep -q 'LaunchScreen.storyboardc'
-
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Package standard unsigned IPA
@@ -160,10 +160,12 @@ jobs:
           test "$APP_COUNT" = "1"
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' ipa-check/Payload/Castmind.app/Info.plist)"
           test -f "ipa-check/Payload/Castmind.app/$EXECUTABLE"
+          file "ipa-check/Payload/Castmind.app/$EXECUTABLE" | grep -E 'Mach-O.*arm64'
           plutil -lint ipa-check/Payload/Castmind.app/Info.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' ipa-check/Payload/Castmind.app/Info.plist)" = "3.0.0"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ipa-check/Payload/Castmind.app/Info.plist)" = "300"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' ipa-check/Payload/Castmind.app/Info.plist)" = "LaunchScreen"
+          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' ipa-check/Payload/Castmind.app/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' ipa-check/Payload/Castmind.app/Info.plist >/dev/null
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' ipa-check/Payload/Castmind.app/Info.plist)" = "true"
           test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' ipa-check/Payload/Castmind.app/Info.plist)" = "LaunchBackground"
           for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do

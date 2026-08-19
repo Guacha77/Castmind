@@ -30,11 +30,9 @@ targets:
           - Resources/Info.plist
           - Resources/PrivacyInfo.xcprivacy
           - Resources/Assets.xcassets
-          - Resources/LaunchScreen.storyboard
     resources:
       - path: Castmind/Resources/Assets.xcassets
       - path: Castmind/Resources/PrivacyInfo.xcprivacy
-      - path: Castmind/Resources/LaunchScreen.storyboard
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.castmind.localai
