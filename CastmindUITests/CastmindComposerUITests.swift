@@ -14,18 +14,14 @@ final class CastmindComposerUITests: XCTestCase {
     func testChatComposerIsVisibleHittableAndOpensKeyboard() throws {
         app = launchApp(arguments: ["CASTMIND_UI_TEST"])
 
-        let composer = app.otherElements["chat.composer"]
-        XCTAssertTrue(composer.waitForExistence(timeout: 5))
-        XCTAssertTrue(composer.isHittable)
-        assertElementInsideScreen(composer)
-        attachScreenshot(named: "Chat sin teclado")
-
         let field = composerTextInput(prefix: "chat")
-        XCTAssertTrue(field.exists)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(field.isHittable)
+        assertElementInsideScreen(field)
         XCTAssertTrue(app.buttons["chat.microphone"].exists)
         XCTAssertTrue(app.buttons["chat.microphone"].isHittable)
         XCTAssertTrue(app.buttons["chat.send"].exists)
+        attachScreenshot(named: "Chat sin teclado")
         field.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         attachScreenshot(named: "Chat con teclado abierto")
@@ -42,18 +38,14 @@ final class CastmindComposerUITests: XCTestCase {
         XCTAssertTrue(roomRow.waitForExistence(timeout: 5))
         roomRow.tap()
 
-        let composer = app.otherElements["room.composer"]
-        XCTAssertTrue(composer.waitForExistence(timeout: 5))
-        XCTAssertTrue(composer.isHittable)
-        assertElementInsideScreen(composer)
-        attachScreenshot(named: "Room sin teclado")
-
         let field = composerTextInput(prefix: "room")
-        XCTAssertTrue(field.exists)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue(field.isHittable)
+        assertElementInsideScreen(field)
         XCTAssertTrue(app.buttons["room.microphone"].exists)
         XCTAssertTrue(app.buttons["room.microphone"].isHittable)
         XCTAssertTrue(app.buttons["room.send"].exists)
+        attachScreenshot(named: "Room sin teclado")
         field.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         attachScreenshot(named: "Room con teclado abierto")

@@ -80,6 +80,8 @@ struct MessageComposer: View {
         .background(CM.elevated2)
         .overlay(Rectangle().stroke(CM.strongBorder, lineWidth: 1))
         .layoutPriority(100)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Message composer")
         .accessibilityIdentifier("\(accessibilityPrefix).composer")
     }
 }
