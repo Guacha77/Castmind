@@ -81,16 +81,29 @@ jobs:
         run: |
           set -euxo pipefail
           xcrun simctl list devices available
-          SIM_DESTINATION='platform=iOS Simulator,name=iPhone 16'
-          if ! xcrun simctl list devices available | grep -q 'iPhone 16'; then
-            SIM_DESTINATION='platform=iOS Simulator,name=iPhone 15'
-          fi
+          xcrun simctl list devices available -j > available-simulators.json
+          SIM_UDID="$(python3 <<'PY'
+          import json
+          with open("available-simulators.json", encoding="utf-8") as handle:
+              data = json.load(handle)["devices"]
+          phones = [
+              device
+              for devices in data.values()
+              for device in devices
+              if device.get("isAvailable") and device.get("name", "").startswith("iPhone")
+          ]
+          preferred = [device for device in phones if "iPhone 16" in device.get("name", "")]
+          print((preferred or phones)[0]["udid"])
+          PY
+          )"
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
           xcodebuild test \
             -project Castmind.xcodeproj \
             -scheme Castmind \
             -configuration Debug \
-            -destination "$SIM_DESTINATION" \
+            -destination "id=$SIM_UDID" \
             -derivedDataPath "$DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
             -resultBundlePath build/CastmindComposerUITests.xcresult \
