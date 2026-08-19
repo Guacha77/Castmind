@@ -2,40 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDisplayName</key>
-	<string>Castmind</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Castmind uses the microphone only when you dictate a message.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Castmind uses Apple speech recognition to transcribe your dictated messages.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Castmind can expose a local Stream Bridge endpoint when you enable it.</string>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-	</dict>
-	<key>UILaunchScreen</key>
-	<dict/>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-	</array>
+    <key>CFBundleDisplayName</key><string>Castmind</string>
+    <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>LSRequiresIPhoneOS</key><true/>
+    <key>UILaunchScreen</key><dict/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array><string>UIInterfaceOrientationPortrait</string></array>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key><false/>
+    </dict>
+    <key>NSMicrophoneUsageDescription</key><string>Castmind usa el micrófono para hablar con tus personajes mediante reconocimiento en el dispositivo.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Castmind transcribe tu voz localmente para conversar con los personajes.</string>
+    <key>NSPhotoLibraryUsageDescription</key><string>Castmind necesita acceso a la fototeca solo para elegir la imagen de tus personajes.</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Castmind usa tu red local para conectar opcionalmente con Stream Bridge y OBS en tu PC.</string>
+    <key>NSBonjourServices</key>
+    <array><string>_castmind._tcp</string></array>
 </dict>
 </plist>

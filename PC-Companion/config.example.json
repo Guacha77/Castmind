@@ -1,0 +1,16 @@
+{
+  "listen_host": "0.0.0.0",
+  "port": 8765,
+  "secret": "CAMBIA_ESTA_CLAVE_Y_PON_LA_MISMA_EN_CASTMIND",
+  "advertise_name": "Castmind PC",
+  "tts_enabled": true,
+  "tts_rate": 185,
+  "obs_enabled": false,
+  "obs_host": "127.0.0.1",
+  "obs_port": 4455,
+  "obs_password": "",
+  "obs_scene": "AI CAST",
+  "caption_source": "Castmind - Captions",
+  "idle_source": "Castmind - Idle",
+  "talking_source": "Castmind - Talking"
+}
