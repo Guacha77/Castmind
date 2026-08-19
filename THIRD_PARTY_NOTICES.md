@@ -1,4 +1,4 @@
-# Third-party notices — Castmind V2
+# Third-party notices — Castmind V3
 
 Castmind no incluye servicios de IA de pago ni claves de API. Utiliza componentes open-source y modelos descargados bajo demanda.
 

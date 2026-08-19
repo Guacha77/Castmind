@@ -31,13 +31,14 @@ final class PerformanceManager: ObservableObject {
 
         switch effectiveMode {
         case .maximum:
-            result.recentContextMessages = min(12, max(6, settings.recentContextMessages))
+            result.maxTokens = min(settings.maxTokens, 160)
+            result.recentContextMessages = min(8, max(4, settings.recentContextMessages))
         case .balanced:
-            result.maxTokens = min(settings.maxTokens, 180)
-            result.recentContextMessages = min(settings.recentContextMessages, 8)
-        case .battery:
-            result.maxTokens = min(settings.maxTokens, 120)
+            result.maxTokens = min(settings.maxTokens, 128)
             result.recentContextMessages = min(settings.recentContextMessages, 6)
+        case .battery:
+            result.maxTokens = min(settings.maxTokens, 96)
+            result.recentContextMessages = min(settings.recentContextMessages, 4)
         case .automatic:
             break
         }

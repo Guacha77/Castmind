@@ -9,6 +9,7 @@ struct CastmindApp: App {
             RootView()
                 .environmentObject(app)
                 .preferredColorScheme(.dark)
+                .background(CM.background.ignoresSafeArea())
         }
     }
 }

@@ -8,6 +8,6 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 if not exist config.json copy /Y config.example.json config.json >nul
 echo.
-echo Castmind Stream Bridge V2 instalado.
+echo Castmind Stream Bridge V3 instalado.
 echo Edita config.json si quieres OBS/TTS personalizado y ejecuta run_bridge.bat.
 pause

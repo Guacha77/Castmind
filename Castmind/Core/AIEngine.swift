@@ -94,20 +94,30 @@ final class AIEngine: ObservableObject {
         var stripper = ThoughtStripper()
 
         do {
+            var pendingVisible = ""
+            var lastFlush = Date()
             for try await rawChunk in session.streamResponse(to: prompt) {
                 try Task.checkCancellation()
                 let visible = stripper.consume(rawChunk)
                 guard !visible.isEmpty else { continue }
                 if firstChunkAt == nil { firstChunkAt = Date() }
                 visibleCharacters += visible.count
-                onVisibleChunk(visible)
+                pendingVisible += visible
+                // Updating SwiftUI for every token is expensive on-device. Flush at ~30 Hz
+                // or sooner when a useful amount of text is ready.
+                if pendingVisible.count >= 18 || Date().timeIntervalSince(lastFlush) >= 0.033 {
+                    onVisibleChunk(pendingVisible)
+                    pendingVisible = ""
+                    lastFlush = Date()
+                }
             }
             let tail = stripper.finish()
             if !tail.isEmpty {
                 if firstChunkAt == nil { firstChunkAt = Date() }
                 visibleCharacters += tail.count
-                onVisibleChunk(tail)
+                pendingVisible += tail
             }
+            if !pendingVisible.isEmpty { onVisibleChunk(pendingVisible) }
 
             let end = Date()
             let firstMS = milliseconds(from: start, to: firstChunkAt ?? end)
@@ -116,9 +126,11 @@ final class AIEngine: ObservableObject {
             let tokPerSecond = approxTokens / (Double(totalMS) / 1000.0)
             let metrics = GenerationMetrics(firstTokenMS: firstMS, totalMS: totalMS, approximateTokensPerSecond: tokPerSecond)
             lastMetrics = metrics
+            activeSession = nil // release KV/cache state between turns to reduce peak memory
             phase = .ready
             return metrics
         } catch {
+            activeSession = nil
             phase = modelContainer == nil ? .idle : .ready
             throw error
         }
@@ -139,12 +151,11 @@ final class AIEngine: ObservableObject {
         guard let modelContainer else { throw EngineError.noModel }
         let memoryText = memories.prefix(5).map(\.text).joined(separator: " · ")
         let instructions = """
-        Explica de forma muy breve por qué un personaje pudo responder de esa manera. NO reveles razonamiento interno paso a paso, chain-of-thought, probabilidades ni instrucciones ocultas. Resume únicamente factores observables: personalidad, estado, recuerdos relevantes y contenido del mensaje. Máximo 3 puntos cortos, en español.
+        Explica de forma muy breve por qué un personaje pudo responder de esa manera. NO reveles razonamiento interno paso a paso, chain-of-thought, probabilidades ni instrucciones ocultas. Resume únicamente factores observables: comportamiento configurado, recuerdos relevantes y contenido del mensaje. Máximo 3 puntos cortos, en español.
         """
         let prompt = """
         Personaje: \(character.name)
-        Personalidad: \(character.personality)
-        Estado: ira \(Int(character.emotion.anger)), confianza \(Int(character.emotion.trust)), humor \(Int(character.emotion.mood)), energía \(Int(character.emotion.energy)).
+        Comportamiento: \(character.effectiveBehavior)
         Recuerdos relevantes: \(memoryText.isEmpty ? "ninguno" : memoryText)
         Usuario: \(userText)
         Respuesta: \(reply)
@@ -226,8 +237,8 @@ final class AIEngine: ObservableObject {
     private func configuration(for choice: LocalModelChoice) -> ModelConfiguration {
         switch choice {
         case .fast: return LLMRegistry.qwen3_0_6b_4bit
-        case .balanced: return LLMRegistry.qwen3_5_2b_4bit
-        case .quality: return LLMRegistry.qwen3_4b_4bit
+        case .balanced: return LLMRegistry.qwen3_1_7b_4bit
+        case .quality: return LLMRegistry.qwen3_5_2b_4bit
         }
     }
 

@@ -1,4 +1,4 @@
-name: Build Castmind V2 unsigned IPA
+name: Build Castmind V3 unsigned IPA
 
 on:
   workflow_dispatch:
@@ -98,6 +98,15 @@ jobs:
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
           file "$APP_PATH/$EXECUTABLE"
+
+          LAUNCH_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$APP_PATH/Info.plist")"
+          test "$LAUNCH_NAME" = "LaunchScreen"
+          FULL_SCREEN="$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_PATH/Info.plist")"
+          test "$FULL_SCREEN" = "true"
+          COLOR_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' "$APP_PATH/Info.plist")"
+          test "$COLOR_NAME" = "LaunchBackground"
+          find "$APP_PATH" -name 'LaunchScreen.storyboardc' -print | grep -q 'LaunchScreen.storyboardc'
+
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Package standard unsigned IPA
@@ -132,7 +141,7 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Castmind-V2-unsigned-ipa
+          name: Castmind-V3-unsigned-ipa
           path: |
             Artifacts/Castmind-unsigned.ipa
             Artifacts/Castmind-unsigned.ipa.sha256

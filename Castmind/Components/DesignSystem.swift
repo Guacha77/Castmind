@@ -7,63 +7,48 @@ extension Color {
         Scanner(string: clean).scanHexInt64(&value)
         switch clean.count {
         case 3:
-            self.init(.sRGB,
-                      red: Double((value >> 8) & 0xF) / 15,
-                      green: Double((value >> 4) & 0xF) / 15,
-                      blue: Double(value & 0xF) / 15,
-                      opacity: 1)
+            self.init(.sRGB, red: Double((value >> 8) & 0xF) / 15, green: Double((value >> 4) & 0xF) / 15, blue: Double(value & 0xF) / 15, opacity: 1)
         default:
-            self.init(.sRGB,
-                      red: Double((value >> 16) & 0xFF) / 255,
-                      green: Double((value >> 8) & 0xFF) / 255,
-                      blue: Double(value & 0xFF) / 255,
-                      opacity: 1)
+            self.init(.sRGB, red: Double((value >> 16) & 0xFF) / 255, green: Double((value >> 8) & 0xFF) / 255, blue: Double(value & 0xFF) / 255, opacity: 1)
         }
     }
 }
 
 enum CM {
-    static let background = Color(hex: "090B11")
-    static let elevated = Color(hex: "11141D")
-    static let elevated2 = Color(hex: "171B27")
+    static let background = Color(hex: "090908")
+    static let elevated = Color(hex: "131411")
+    static let elevated2 = Color(hex: "1B1C18")
+    static let concrete = Color(hex: "C9CBC6")
     static let textSecondary = Color.white.opacity(0.62)
-    static let textTertiary = Color.white.opacity(0.38)
-    static let border = Color.white.opacity(0.09)
-    static let purple = Color(hex: "9C6BFF")
-    static let cyan = Color(hex: "62D8FF")
-    static let green = Color(hex: "62E6A8")
-    static let orange = Color(hex: "FFAA5C")
-    static let red = Color(hex: "FF657D")
+    static let textTertiary = Color.white.opacity(0.36)
+    static let border = Color.white.opacity(0.18)
+    static let strongBorder = Color.white.opacity(0.45)
+    static let orange = Color(hex: "FF4B17")
+    static let green = Color(hex: "67D49A")
+    static let red = Color(hex: "FF5C55")
+    static let purple = orange
+    static let cyan = concrete
 }
 
 struct CastmindBackground: View {
-    var accent: Color = CM.purple
+    var accent: Color = CM.orange
     var body: some View {
-        ZStack {
-            CM.background
-            RadialGradient(colors: [accent.opacity(0.20), .clear], center: .topLeading, startRadius: 30, endRadius: 480)
-            RadialGradient(colors: [CM.cyan.opacity(0.10), .clear], center: .bottomTrailing, startRadius: 10, endRadius: 380)
-            LinearGradient(colors: [.clear, Color.black.opacity(0.14)], startPoint: .top, endPoint: .bottom)
-        }
-        .ignoresSafeArea()
+        CM.background
+            .overlay(alignment: .top) {
+                Rectangle().fill(accent).frame(height: 2)
+            }
+            .ignoresSafeArea(.all)
     }
 }
 
 struct CMCard<Content: View>: View {
-    var padding: CGFloat = 16
+    var padding: CGFloat = 14
     @ViewBuilder let content: () -> Content
-
     var body: some View {
         content()
             .padding(padding)
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(CM.elevated.opacity(0.86))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(CM.border, lineWidth: 1)
-                    )
-            )
+            .background(CM.elevated)
+            .overlay(Rectangle().stroke(CM.border, lineWidth: 1))
     }
 }
 
@@ -71,9 +56,14 @@ struct CMSectionTitle: View {
     let title: String
     var subtitle: String? = nil
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.headline.weight(.semibold))
-            if let subtitle { Text(subtitle).font(.caption).foregroundStyle(CM.textSecondary) }
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title.uppercased())
+                .font(.system(.caption, design: .monospaced).weight(.bold))
+                .tracking(1.1)
+                .foregroundStyle(.white)
+            if let subtitle {
+                Text(subtitle).font(.caption).foregroundStyle(CM.textSecondary)
+            }
         }
     }
 }
@@ -81,58 +71,28 @@ struct CMSectionTitle: View {
 struct CMChip: View {
     let text: String
     var icon: String? = nil
-    var accent: Color = CM.purple
-
+    var accent: Color = CM.orange
     var body: some View {
         HStack(spacing: 5) {
             if let icon { Image(systemName: icon).font(.caption2.weight(.bold)) }
-            Text(text).font(.caption.weight(.semibold))
+            Text(text.uppercased()).font(.system(.caption2, design: .monospaced).weight(.bold))
         }
         .foregroundStyle(accent)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(accent.opacity(0.12), in: Capsule())
-        .overlay(Capsule().stroke(accent.opacity(0.20), lineWidth: 1))
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .overlay(Rectangle().stroke(accent.opacity(0.75), lineWidth: 1))
     }
 }
 
 struct CMPrimaryButtonStyle: ButtonStyle {
-    var accent: Color = CM.purple
+    var accent: Color = CM.orange
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline.weight(.semibold))
-            .foregroundStyle(.white)
+            .font(.system(.body, design: .monospaced).weight(.bold))
+            .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
-            .background(accent.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
-struct EmotionMeter: View {
-    let title: String
-    let value: Double
-    let icon: String
-    let accent: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Image(systemName: icon)
-                Text(title).font(.caption.weight(.semibold))
-                Spacer()
-                Text("\(Int(value))").font(.caption.monospacedDigit().weight(.bold)).foregroundStyle(CM.textSecondary)
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.07))
-                    Capsule().fill(accent.gradient).frame(width: max(4, proxy.size.width * value / 100))
-                }
-            }
-            .frame(height: 5)
-        }
-        .foregroundStyle(.white.opacity(0.82))
+            .padding(.vertical, 14)
+            .background(configuration.isPressed ? accent.opacity(0.72) : accent)
+            .overlay(Rectangle().stroke(Color.black.opacity(0.8), lineWidth: 1))
     }
 }
 
@@ -140,25 +100,28 @@ struct ModelStatusBadge: View {
     @EnvironmentObject private var app: AppState
     var body: some View {
         HStack(spacing: 7) {
-            Circle()
-                .fill(app.ai.isReady ? CM.green : (app.ai.isGenerating ? CM.orange : CM.textTertiary))
-                .frame(width: 7, height: 7)
-            Text(app.modelStatusText)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(CM.textSecondary)
+            Circle().fill(statusColor).frame(width: 7, height: 7)
+            Text(app.modelStatusText.uppercased())
+                .font(.system(.caption2, design: .monospaced).weight(.bold))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Color.white.opacity(0.055), in: Capsule())
+        .foregroundStyle(CM.textSecondary)
+    }
+    private var statusColor: Color {
+        switch app.ai.phase {
+        case .ready: return CM.green
+        case .generating, .warming, .loading, .downloading: return CM.orange
+        case .failed: return CM.red
+        default: return CM.textTertiary
+        }
     }
 }
 
 struct KeyboardDoneToolbar: ToolbarContent {
-    var dismiss: () -> Void
+    let action: () -> Void
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .keyboard) {
             Spacer()
-            Button("Cerrar") { dismiss() }
+            Button("Cerrar", action: action)
         }
     }
 }

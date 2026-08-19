@@ -69,11 +69,15 @@ final class PersistenceStore {
 
     @discardableResult
     func saveAvatar(_ data: Data, for characterID: UUID) throws -> String {
-        let filename = "avatar-\(characterID.uuidString).jpg"
+        let filename = "avatar-\(characterID.uuidString)-\(UUID().uuidString.prefix(8)).jpg"
         let url = avatarsFolder.appendingPathComponent(filename)
-        guard let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.90) else {
-            throw StoreError.invalidImage
-        }
+        guard let image = UIImage(data: data) else { throw StoreError.invalidImage }
+        let maxSide: CGFloat = 1024
+        let scale = min(1, maxSide / max(image.size.width, image.size.height))
+        let target = CGSize(width: max(1, image.size.width * scale), height: max(1, image.size.height * scale))
+        let renderer = UIGraphicsImageRenderer(size: target)
+        let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
+        guard let jpeg = resized.jpegData(compressionQuality: 0.82) else { throw StoreError.invalidImage }
         try jpeg.write(to: url, options: [.atomic])
         return filename
     }
@@ -121,7 +125,7 @@ final class PersistenceStore {
         let data = try encoder.encode(backup)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Castmind-V2-Backup-\(formatter.string(from: Date())).json")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Castmind-V3-Backup-\(formatter.string(from: Date())).json")
         try data.write(to: url, options: [.atomic])
         return url
     }
@@ -172,6 +176,7 @@ final class PersistenceStore {
         character.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Gregorio" : profile.name
         character.subtitle = "Importado de Castmind V1"
         character.personality = profile.personality
+        character.behaviorPrompt = profile.personality
         character.wakeWord = character.name
         character.voice.voiceIdentifier = profile.voiceIdentifier
         character.voice.autoSpeak = generation.speakReplies

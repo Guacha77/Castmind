@@ -1,4 +1,4 @@
-# Castmind Stream Bridge V2
+# Castmind Stream Bridge V3
 
 Companion local para Windows. Recibe las respuestas de Castmind por Wi‑Fi, se anuncia automáticamente mediante mDNS/Bonjour y puede actualizar OBS + reproducir TTS local.
 

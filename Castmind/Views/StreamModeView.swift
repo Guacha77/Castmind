@@ -6,81 +6,109 @@ struct StreamModeView: View {
     @State private var showControls = true
 
     private var lastReply: String {
-        app.activeMessages.last(where: { $0.role == .assistant })?.text ?? app.activeCharacter.greeting
+        app.activeMessages.last(where: { $0.role == .assistant })?.text ?? ""
     }
 
     var body: some View {
         ZStack {
-            CastmindBackground(accent: Color(hex: app.activeCharacter.accentHex))
-            VStack(spacing: 18) {
-                HStack {
-                    Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 42, height: 42).background(Color.white.opacity(0.07), in: Circle()) }
-                    Spacer()
-                    ModelStatusBadge()
-                    Spacer()
-                    Button { withAnimation(.snappy) { showControls.toggle() } } label: { Image(systemName: showControls ? "eye.slash" : "eye").frame(width: 42, height: 42).background(Color.white.opacity(0.07), in: Circle()) }
-                }
+            CM.background.ignoresSafeArea(.all)
+            Rectangle().fill(CM.orange).frame(height: 2).frame(maxHeight: .infinity, alignment: .top).ignoresSafeArea()
 
-                Spacer()
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 18)
                 CharacterAvatarView(
                     character: app.activeCharacter,
-                    size: 240,
+                    size: 220,
                     speaking: app.speaker.isSpeaking,
                     listening: app.recognizer.isListening,
                     speechPulse: app.speaker.speechPulse,
                     audioLevel: app.recognizer.audioLevel
                 )
-                VStack(spacing: 5) {
-                    Text(app.activeCharacter.name).font(.system(size: 32, weight: .black, design: .rounded))
-                    Text(app.speaker.isSpeaking ? "HABLANDO" : app.recognizer.isListening ? "ESCUCHANDO" : "LISTO")
-                        .font(.caption.weight(.black)).tracking(1.8)
-                        .foregroundStyle(app.speaker.isSpeaking ? CM.green : app.recognizer.isListening ? CM.orange : CM.textSecondary)
+                .padding(.bottom, 16)
+
+                VStack(spacing: 6) {
+                    Text(app.activeCharacter.name.uppercased())
+                        .font(.system(size: 27, weight: .black, design: .monospaced))
+                    Text(runtimeState)
+                        .font(.caption.monospaced().bold())
+                        .foregroundStyle(runtimeColor)
                 }
 
-                Text(lastReply.isEmpty ? "…" : lastReply)
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                Text(lastReply.isEmpty ? "WAITING_FOR_INPUT" : lastReply)
+                    .font(.system(size: 18, weight: .medium, design: .default))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(6)
-                    .padding(.horizontal, 20)
-                    .animation(.easeOut(duration: 0.15), value: lastReply)
+                    .foregroundStyle(lastReply.isEmpty ? CM.textTertiary : .white)
+                    .lineLimit(7)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                    .animation(.easeOut(duration: 0.12), value: lastReply)
 
-                Spacer()
-                if showControls {
-                    HStack(spacing: 18) {
-                        Button {
-                            app.speaker.stop()
-                        } label: {
-                            Label("Silencio", systemImage: "speaker.slash.fill").labelStyle(.iconOnly)
-                                .frame(width: 54, height: 54).background(Color.white.opacity(0.08), in: Circle())
-                        }
-                        Button {
-                            Task { await app.toggleMicrophone() }
-                        } label: {
-                            Image(systemName: app.recognizer.isListening ? "stop.fill" : "mic.fill")
-                                .font(.title2.weight(.bold))
-                                .frame(width: 76, height: 76)
-                                .background(app.recognizer.isListening ? CM.red : Color(hex: app.activeCharacter.accentHex), in: Circle())
-                                .shadow(color: Color(hex: app.activeCharacter.accentHex).opacity(0.25), radius: 24)
-                        }
-                        if app.ai.isGenerating {
-                            Button { app.cancelCurrentResponse() } label: {
-                                Image(systemName: "stop.fill").frame(width: 54, height: 54).background(CM.orange, in: Circle()).foregroundStyle(CM.background)
-                            }
-                        } else {
-                            Button {
-                                app.speaker.speak(lastReply, settings: app.activeCharacter.voice, locale: app.settings.speechLocale)
-                            } label: {
-                                Image(systemName: "arrow.clockwise").frame(width: 54, height: 54).background(Color.white.opacity(0.08), in: Circle())
-                            }
-                        }
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                Spacer(minLength: 20)
+                if showControls { controls.transition(.move(edge: .bottom).combined(with: .opacity)) }
             }
-            .padding(18)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 0) {
+            Button { dismiss() } label: {
+                Text("EXIT").font(.caption.monospaced().bold()).foregroundStyle(.white).frame(width: 64, height: 44)
+            }
+            Spacer()
+            ModelStatusBadge()
+            Spacer()
+            Button { withAnimation(.easeOut(duration: 0.15)) { showControls.toggle() } } label: {
+                Text(showControls ? "HIDE_UI" : "SHOW_UI").font(.caption.monospaced().bold()).foregroundStyle(CM.orange).frame(width: 80, height: 44)
+            }
+        }
+        .overlay(alignment: .bottom) { Rectangle().fill(CM.strongBorder).frame(height: 1) }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 0) {
+            control("MUTE", icon: "speaker.slash.fill") { app.speaker.stop() }
+            control(app.recognizer.isListening ? "STOP" : "TALK", icon: app.recognizer.isListening ? "stop.fill" : "mic.fill", highlighted: true) {
+                Task { await app.toggleMicrophone() }
+            }
+            if app.ai.isGenerating {
+                control("CANCEL", icon: "xmark") { app.cancelCurrentResponse() }
+            } else {
+                control("REPLAY", icon: "arrow.clockwise") {
+                    app.speaker.speak(lastReply, settings: app.activeCharacter.voice, locale: app.settings.speechLocale)
+                }
+            }
+        }
+        .frame(height: 66)
+        .overlay(Rectangle().stroke(CM.strongBorder))
+    }
+
+    private func control(_ title: String, icon: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 17, weight: .bold))
+                Text(title).font(.system(size: 9, weight: .bold, design: .monospaced))
+            }
+            .foregroundStyle(highlighted ? .black : .white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(highlighted ? CM.orange : CM.elevated)
+        }.buttonStyle(.plain)
+    }
+
+    private var runtimeState: String {
+        if app.speaker.isSpeaking { return "TX / SPEAKING" }
+        if app.recognizer.isListening { return "RX / LISTENING" }
+        if app.ai.isGenerating { return "AI / GENERATING" }
+        return "LOCAL / READY"
+    }
+
+    private var runtimeColor: Color {
+        if app.speaker.isSpeaking { return CM.green }
+        if app.recognizer.isListening || app.ai.isGenerating { return CM.orange }
+        return CM.textSecondary
     }
 }

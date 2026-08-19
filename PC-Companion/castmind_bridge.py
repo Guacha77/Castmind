@@ -182,7 +182,7 @@ class BridgeServer:
                 "_castmind._tcp.local.",
                 f"{self.cfg.get('advertise_name','Castmind PC')}._castmind._tcp.local.",
                 addresses=[ip], port=int(self.cfg["port"]),
-                properties={"version": "2", "product": "Castmind"}, server=f"{socket.gethostname()}.local."
+                properties={"version": "3", "product": "Castmind"}, server=f"{socket.gethostname()}.local."
             )
             self.zeroconf.register_service(self.info)
             self.emit("Descubrimiento automático activo")
@@ -199,7 +199,7 @@ class BridgeServer:
 
 class Dashboard(tk.Tk):
     def __init__(self):
-        super().__init__(); self.title("Castmind Stream Bridge V2"); self.geometry("780x560"); self.minsize(680, 500)
+        super().__init__(); self.title("Castmind Stream Bridge V3"); self.geometry("780x560"); self.minsize(680, 500)
         self.cfg = load_config(); self.state_data = BridgeState(); self.log_q = queue.Queue()
         self._style(); self._build()
         self.server = BridgeServer(self.cfg, self.state_data, self.log, self.update_cards); self.server.start()
@@ -216,7 +216,7 @@ class Dashboard(tk.Tk):
         root = ttk.Frame(self, padding=22); root.pack(fill="both", expand=True)
         top = ttk.Frame(root); top.pack(fill="x")
         ttk.Label(top, text="CASTMIND", style="Title.TLabel").pack(side="left")
-        ttk.Label(top, text="STREAM BRIDGE V2", style="Muted.TLabel").pack(side="left", padx=12, pady=(9,0))
+        ttk.Label(top, text="STREAM BRIDGE V3", style="Muted.TLabel").pack(side="left", padx=12, pady=(9,0))
         self.conn = ttk.Label(top, text="● 0 iPhone", style="Big.TLabel"); self.conn.pack(side="right")
 
         info = ttk.LabelFrame(root, text="Estado", padding=14); info.pack(fill="x", pady=(18,12))
@@ -260,7 +260,7 @@ class Dashboard(tk.Tk):
     def _test_obs(self):
         if not self.cfg.get("obs_enabled"):
             messagebox.showinfo("OBS", "Activa obs_enabled en config.json y reinicia el companion."); return
-        self.server.obs.caption("Castmind V2 · prueba correcta")
+        self.server.obs.caption("Castmind V3 · prueba correcta")
         self.server.obs.talking(True); self.after(700, lambda: self.server.obs.talking(False))
 
 

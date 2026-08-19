@@ -1,48 +1,36 @@
-# Castmind V2 — Arquitectura
+# Castmind V3 — Arquitectura
 
 ## Principios
-- **Un modelo en RAM, muchos personajes**: `AIEngine` mantiene un único `ModelContainer`; personalidad, memoria y parámetros viven fuera del modelo.
-- **Datos aislados por personaje**: cada `CharacterProfile` tiene configuración, voz, estado, relaciones y memorias propias.
-- **Offline-first**: inferencia, STT, TTS, memoria y UI funcionan localmente. La red solo se usa para descargar pesos y para Stream Bridge si se activa.
-- **UI reactiva, núcleo pequeño**: `AppState` orquesta; servicios especializados hacen IA, persistencia, audio, memoria, rendimiento y bridge.
-- **Fallos recuperables**: generación cancelable, persistencia atómica, backups, migración V1 y validación estricta del IPA.
 
-## Flujo de una respuesta
-```text
-Usuario (texto / micrófono)
-  → routing por wake word (opcional)
-  → memoria relevante + estado + escenario + contexto reciente
-  → AIEngine / MLX (streaming)
-  → filtro <think> → burbuja visible desde el primer texto útil
-  → TTS por frases en paralelo (opcional)
-  → persistencia + métricas + Stream Bridge (opcional)
-```
+1. **Un modelo global** en RAM.
+2. **Muchos personajes**, cada uno con `behaviorPrompt`, parámetros, voz y memoria independientes.
+3. El prompt de comportamiento es la única autoridad de personalidad.
+4. El contexto dinámico se mantiene pequeño y factual.
+5. La UI no debe realizar trabajo continuo cuando está en reposo.
 
-## Capas
-- `Models/Domain.swift`: modelos de dominio y configuración.
-- `Core/AIEngine.swift`: carga, warm-up, streaming, benchmark y caché del modelo.
-- `Core/AppState.swift`: orquestación principal, multi-personaje, chat, salas, import/export.
-- `Core/PersistenceStore.swift`: biblioteca V2, avatars, backups y migración V1.
-- `Core/MemoryEngine.swift`: captura heurística, ranking por relevancia y decay.
-- `Core/StateAnalyzer.swift`: cambios emocionales locales sin llamada extra al LLM.
-- `Core/SpeechServices.swift`: STT on-device y TTS local con streaming por frases.
-- `Core/PerformanceManager.swift`: perfiles de rendimiento y adaptación térmica.
-- `Core/StreamBridgeService.swift`: WebSocket + descubrimiento Bonjour/mDNS.
-- `Views/`: interfaz SwiftUI.
-- `PC-Companion/`: dashboard Windows, mDNS, WebSocket, OBS y TTS local.
+## Flujo de chat
+
+`input → memoria relevante → strict system prompt → MLX stream → UI throttled → ReplySanitizer → persistencia → TTS final`
+
+`ReplySanitizer` es una capa defensiva; la primera defensa sigue siendo el contrato del prompt.
+
+## Salas
+
+Cada participante recibe una inferencia separada. La transcripción incluye etiquetas de autores, pero el contrato exige una sola intervención del `PERSONAJE ASIGNADO`. Solo tras sanitizar se añade esa respuesta a la sala. Nunca se publica el stream bruto del modelo en la sala.
 
 ## Persistencia
-V2 guarda `library-v2.json`, `settings-v2.json` y avatares bajo `Application Support/CastmindV2`. Los JSON de V2 usan fechas ISO-8601 y escrituras atómicas.
 
-En el primer arranque, si no existe biblioteca V2, se buscan los archivos reales de V1 en Documents:
-- `castmind-profile.json`
-- `castmind-messages.json`
-- `castmind-generation.json`
+La estructura V2 de biblioteca se conserva para que una actualización no pierda datos. `CharacterProfile.behaviorPrompt` es opcional en Codable para poder abrir personajes antiguos; `effectiveBehavior` migra de forma lógica los campos legacy cuando sea necesario.
 
-La migración conserva perfil, conversación, memoria textual, voz, parámetros, onboarding y datos básicos del bridge.
+## Estabilidad
 
-## Seguridad del Stream Bridge
-El bridge solo se activa si el usuario lo habilita. Los eventos incluyen una clave compartida local; el companion rechaza mensajes con una clave distinta. No se ejecutan comandos arbitrarios recibidos del modelo.
+- 1.7B como default.
+- Límites térmicos en `PerformanceManager`.
+- `NSCache` para avatares.
+- Memory warning → cancelar voz/generación → unload MLX.
+- `activeSession` de MLX liberada después de cada turno.
+- Modelo global evita churn de RAM al cambiar de personaje.
 
-## Pensamiento / explicaciones
-Castmind nunca intenta exponer chain-of-thought privado. Los bloques `<think>` se eliminan de la salida visible. El gesto lateral de una respuesta genera, bajo demanda, un resumen breve de factores observables (mensaje, personalidad, memoria y estado).
+## Full-screen
+
+El target contiene configuración launch moderna y storyboard. CI inspecciona el `Info.plist` **construido**, no solo el fuente, y comprueba que el storyboard compilado existe dentro de `Castmind.app`.

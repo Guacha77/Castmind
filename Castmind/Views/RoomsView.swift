@@ -6,64 +6,43 @@ struct RoomsView: View {
 
     var body: some View {
         ZStack {
-            CastmindBackground(accent: CM.cyan)
+            CastmindBackground(accent: CM.orange)
             if app.library.rooms.isEmpty {
-                ContentUnavailableView {
-                    Label("Crea una sala", systemImage: "person.3.fill")
-                } description: {
-                    Text("Mete varios personajes en la misma conversación y deja que reaccionen entre ellos.")
-                } actions: {
-                    Button("Nueva sala") { showCreate = true }.buttonStyle(.borderedProminent).tint(CM.cyan)
-                }
+                VStack(spacing: 14) {
+                    Text("ROOM_INDEX_EMPTY").font(.title2.monospaced().bold())
+                    Text("Crea una sala para que varios personajes respondan en turnos independientes.").font(.caption).foregroundStyle(CM.textSecondary).multilineTextAlignment(.center)
+                    Button("NEW_ROOM [+]") { showCreate = true }.buttonStyle(CMPrimaryButtonStyle()).frame(maxWidth: 260)
+                }.padding(28)
             } else {
                 ScrollView {
-                    VStack(spacing: 12) {
+                    LazyVStack(spacing: 0) {
+                        HStack { Text("ROOM_INDEX").font(.caption.monospaced().bold()).foregroundStyle(CM.textSecondary); Spacer(); Button("NEW [+]") { showCreate = true }.font(.caption.monospaced().bold()).foregroundStyle(CM.orange) }
+                            .padding(.vertical, 12)
                         ForEach(app.library.rooms) { room in
-                            NavigationLink {
-                                RoomDetailView(roomID: room.id)
-                            } label: {
-                                RoomCard(room: room)
-                            }
-                            .buttonStyle(.plain)
+                            NavigationLink { RoomDetailView(roomID: room.id) } label: { RoomRow(room: room) }.buttonStyle(.plain)
                         }
-                    }
-                    .padding(16)
+                    }.padding(12)
                 }
             }
         }
-        .navigationTitle("Salas")
+        .navigationTitle("SALAS").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showCreate = true } label: { Image(systemName: "plus") } } }
         .sheet(isPresented: $showCreate) { CreateRoomSheet() }
     }
 }
 
-private struct RoomCard: View {
+private struct RoomRow: View {
     @EnvironmentObject private var app: AppState
     let room: CharacterRoom
-
-    private var participants: [CharacterProfile] {
-        room.participantIDs.compactMap { id in app.library.characters.first(where: { $0.id == id }) }
-    }
-
+    var names: String { room.participantIDs.compactMap { id in app.library.characters.first(where: { $0.id == id })?.name }.joined(separator: " / ") }
     var body: some View {
-        CMCard {
-            HStack(spacing: 14) {
-                ZStack {
-                    ForEach(Array(participants.prefix(3).enumerated()), id: \.element.id) { index, character in
-                        CharacterAvatarView(character: character, size: 50)
-                            .offset(x: CGFloat(index) * 25)
-                    }
-                }
-                .frame(width: 100, alignment: .leading)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(room.title).font(.headline).foregroundStyle(.white)
-                    Text(participants.map(\.name).joined(separator: " · ")).font(.caption).foregroundStyle(CM.textSecondary).lineLimit(1)
-                    Text("\(room.messages.count) mensajes").font(.caption2).foregroundStyle(CM.textTertiary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(CM.textTertiary)
+        HStack {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(room.title.uppercased()).font(.headline.monospaced().bold()).foregroundStyle(.white)
+                Text(names.uppercased()).font(.caption2.monospaced()).foregroundStyle(CM.textSecondary).lineLimit(1)
             }
-        }
+            Spacer(); Text("\(room.messages.count)").font(.caption.monospacedDigit()).foregroundStyle(CM.textTertiary); Text("→").foregroundStyle(CM.orange)
+        }.padding(.vertical, 15).overlay(alignment: .bottom) { Rectangle().fill(CM.border).frame(height: 1) }
     }
 }
 
@@ -72,94 +51,72 @@ struct RoomDetailView: View {
     let roomID: UUID
     @State private var text = ""
     @State private var showEdit = false
-
+    @FocusState private var focused: Bool
     private var room: CharacterRoom? { app.library.rooms.first(where: { $0.id == roomID }) }
 
     var body: some View {
         ZStack {
-            CastmindBackground(accent: CM.cyan)
+            CastmindBackground(accent: CM.orange)
             if let room {
                 VStack(spacing: 0) {
-                    participantStrip(room)
-                    Divider().overlay(CM.border)
+                    participants(room)
+                    Rectangle().fill(CM.border).frame(height: 1)
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(spacing: 10) {
-                                ForEach(room.messages) { message in
-                                    RoomMessageBubble(message: message)
-                                }
-                                Color.clear.frame(height: 1).id("room-bottom")
-                            }.padding(14)
-                        }
-                        .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("room-bottom", anchor: .bottom) }
+                                ForEach(room.messages) { RoomMessageRow(message: $0) }
+                                Color.clear.frame(height: 1).id("bottom")
+                            }.padding(12)
+                        }.scrollDismissesKeyboard(.interactively)
+                        .onTapGesture { focused = false }
+                        .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
                     }
-                    roomComposer
+                    composer
                 }
             }
         }
-        .navigationTitle(room?.title ?? "Sala")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { Button { showEdit = true } label: { Image(systemName: "slider.horizontal.3") } }
-        }
+        .navigationTitle(room?.title.uppercased() ?? "ROOM").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showEdit = true } label: { Image(systemName: "slider.horizontal.3") } }; KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEdit) { EditRoomSheet(roomID: roomID) }
     }
 
-    private func participantStrip(_ room: CharacterRoom) -> some View {
+    private func participants(_ room: CharacterRoom) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 ForEach(room.participantIDs, id: \.self) { id in
-                    if let character = app.library.characters.first(where: { $0.id == id }) {
-                        HStack(spacing: 7) {
-                            CharacterAvatarView(character: character, size: 34)
-                            Text(character.name).font(.caption.weight(.semibold))
-                        }
+                    if let c = app.library.characters.first(where: { $0.id == id }) {
+                        HStack(spacing: 6) { CharacterAvatarView(character: c, size: 28); Text(c.name.uppercased()).font(.caption2.monospaced().bold()) }
                     }
                 }
-            }.padding(.horizontal, 14).padding(.vertical, 8)
+            }.padding(.horizontal, 12).padding(.vertical, 8)
         }
     }
 
-    private var roomComposer: some View {
-        HStack(spacing: 9) {
-            TextField("Di algo a la sala…", text: $text, axis: .vertical)
-                .lineLimit(1...4)
-                .padding(11).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
-            if app.ai.isGenerating {
-                Button { app.cancelRoomGeneration() } label: { Image(systemName: "stop.fill").frame(width: 42, height: 42).background(CM.orange, in: Circle()).foregroundStyle(CM.background) }
-            } else {
-                Button {
-                    let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !clean.isEmpty else { return }
-                    text = ""
-                    app.sendToRoom(clean, roomID: roomID)
-                } label: { Image(systemName: "arrow.up").frame(width: 42, height: 42).background(CM.cyan, in: Circle()).foregroundStyle(CM.background) }
-            }
-        }.padding(12).background(.ultraThinMaterial)
+    private var composer: some View {
+        HStack(spacing: 8) {
+            TextField("MESSAGE_ROOM", text: $text, axis: .vertical).font(.body.monospaced()).lineLimit(1...4).focused($focused)
+                .padding(10).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
+            Button {
+                if app.ai.isGenerating { app.cancelRoomGeneration() }
+                else { let clean=text.trimmingCharacters(in: .whitespacesAndNewlines); guard !clean.isEmpty else { return }; text=""; focused=false; app.sendToRoom(clean, roomID: roomID) }
+            } label: { Image(systemName: app.ai.isGenerating ? "stop.fill" : "arrow.up").frame(width: 42, height: 42).background(app.ai.isGenerating ? CM.red : CM.orange).foregroundStyle(.black) }
+        }.padding(10).overlay(alignment: .top) { Rectangle().fill(CM.border).frame(height: 1) }
     }
 }
 
-private struct RoomMessageBubble: View {
+private struct RoomMessageRow: View {
     @EnvironmentObject private var app: AppState
     let message: RoomMessage
-
-    private var character: CharacterProfile? {
-        guard let id = message.characterID else { return nil }
-        return app.library.characters.first(where: { $0.id == id })
-    }
-
+    private var character: CharacterProfile? { guard let id=message.characterID else { return nil }; return app.library.characters.first(where: { $0.id == id }) }
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            if message.characterID == nil { Spacer(minLength: 50) }
-            if let character {
-                CharacterAvatarView(character: character, size: 30)
-            }
+        HStack(alignment: .top, spacing: 8) {
+            if message.characterID == nil { Spacer(minLength: 38) }
+            if let c=character { CharacterAvatarView(character: c, size: 28) }
             VStack(alignment: .leading, spacing: 4) {
-                if let character { Text(character.name).font(.caption2.weight(.bold)).foregroundStyle(Color(hex: character.accentHex)) }
-                Text(message.text).padding(.horizontal, 12).padding(.vertical, 9)
-                    .background(message.characterID == nil ? CM.purple.opacity(0.82) : CM.elevated2, in: RoundedRectangle(cornerRadius: 16))
+                Text(message.characterID == nil ? "YOU" : (character?.name.uppercased() ?? "CHAR")).font(.caption2.monospaced().bold()).foregroundStyle(message.characterID == nil ? CM.orange : CM.textSecondary)
+                Text(message.text).frame(maxWidth: .infinity, alignment: .leading).padding(10).background(CM.elevated).overlay(Rectangle().stroke(message.characterID == nil ? CM.orange.opacity(0.5) : CM.border))
             }
-            if message.characterID != nil { Spacer(minLength: 35) }
+            if message.characterID != nil { Spacer(minLength: 28) }
         }
     }
 }
@@ -167,39 +124,13 @@ private struct RoomMessageBubble: View {
 private struct CreateRoomSheet: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
-    @State private var title = "Mesa redonda"
-    @State private var selected = Set<UUID>()
-
+    @State private var title="Mesa redonda"
+    @State private var selected=Set<UUID>()
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Sala") { TextField("Nombre", text: $title) }
-                Section("Personajes") {
-                    ForEach(app.library.characters) { character in
-                        Button {
-                            if selected.contains(character.id) { selected.remove(character.id) } else if selected.count < 4 { selected.insert(character.id) }
-                        } label: {
-                            HStack {
-                                Text(character.name).foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: selected.contains(character.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(selected.contains(character.id) ? CM.cyan : .secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Nueva sala")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Crear") {
-                        _ = app.createRoom(title: title.isEmpty ? "Sala" : title, participants: Array(selected))
-                        dismiss()
-                    }.disabled(selected.isEmpty)
-                }
-            }
-            .onAppear { if selected.isEmpty { selected = Set(app.library.characters.prefix(2).map(\.id)) } }
-        }
+        NavigationStack { Form {
+            Section("Sala") { TextField("Nombre", text: $title) }
+            Section("Personajes") { ForEach(app.library.characters) { c in Button { if selected.contains(c.id) { selected.remove(c.id) } else if selected.count < 4 { selected.insert(c.id) } } label: { HStack { Text(c.name); Spacer(); Image(systemName: selected.contains(c.id) ? "checkmark.square.fill" : "square") } } } }
+        }.navigationTitle("Nueva sala").toolbar { ToolbarItem(placement:.cancellationAction){Button("Cancelar"){dismiss()}}; ToolbarItem(placement:.confirmationAction){Button("Crear"){ _=app.createRoom(title:title.isEmpty ? "Sala":title, participants:Array(selected)); dismiss() }.disabled(selected.isEmpty)} }.onAppear { if selected.isEmpty { selected=Set(app.library.characters.prefix(2).map(\.id)) } } }
     }
 }
 
@@ -207,53 +138,13 @@ private struct EditRoomSheet: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
     let roomID: UUID
-    @State private var title = ""
-    @State private var selected = Set<UUID>()
-
+    @State private var title=""
+    @State private var selected=Set<UUID>()
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Sala") { TextField("Nombre", text: $title) }
-                Section("Personajes") {
-                    ForEach(app.library.characters) { character in
-                        Button {
-                            if selected.contains(character.id) {
-                                selected.remove(character.id)
-                            } else if selected.count < 4 {
-                                selected.insert(character.id)
-                            }
-                        } label: {
-                            HStack {
-                                Text(character.name).foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: selected.contains(character.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selected.contains(character.id) ? CM.cyan : .secondary)
-                            }
-                        }
-                    }
-                }
-                Section {
-                    Button("Eliminar sala", role: .destructive) { app.deleteRoom(roomID); dismiss() }
-                }
-            }
-            .navigationTitle("Editar sala")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Guardar") {
-                        guard var room = app.library.rooms.first(where: { $0.id == roomID }) else { return }
-                        room.title = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Sala" : title
-                        room.participantIDs = Array(selected)
-                        app.updateRoom(room)
-                        dismiss()
-                    }.disabled(selected.isEmpty)
-                }
-            }
-            .onAppear {
-                guard let room = app.library.rooms.first(where: { $0.id == roomID }) else { return }
-                title = room.title
-                selected = Set(room.participantIDs)
-            }
-        }
+        NavigationStack { Form {
+            Section("Sala") { TextField("Nombre", text:$title) }
+            Section("Personajes") { ForEach(app.library.characters) { c in Button { if selected.contains(c.id){selected.remove(c.id)} else if selected.count<4{selected.insert(c.id)} } label:{HStack{Text(c.name);Spacer();Image(systemName:selected.contains(c.id) ? "checkmark.square.fill":"square")}} } }
+            Section { Button("Eliminar sala", role:.destructive){ app.deleteRoom(roomID); dismiss() } }
+        }.navigationTitle("Editar sala").toolbar { ToolbarItem(placement:.cancellationAction){Button("Cancelar"){dismiss()}}; ToolbarItem(placement:.confirmationAction){Button("Guardar"){ guard var r=app.library.rooms.first(where:{$0.id==roomID}) else{return}; r.title=title.isEmpty ? "Sala":title; r.participantIDs=Array(selected); app.updateRoom(r); dismiss() }.disabled(selected.isEmpty)} }.onAppear{ guard let r=app.library.rooms.first(where:{$0.id==roomID}) else{return}; title=r.title; selected=Set(r.participantIDs) } }
     }
 }
