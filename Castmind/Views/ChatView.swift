@@ -11,16 +11,22 @@ struct ChatView: View {
     @State private var showStream = false
 
     var body: some View {
-        ZStack {
-            CastmindBackground(accent: CM.orange)
-            VStack(spacing: 0) {
-                header
-                if app.settings.showPerformanceHUD { performanceHUD }
-                Rectangle().fill(CM.border).frame(height: 1)
-                messages
+        GeometryReader { geometry in
+            ZStack {
+                CastmindBackground(accent: CM.orange)
+                VStack(spacing: 0) {
+                    header
+                    if app.settings.showPerformanceHUD { performanceHUD }
+                    Rectangle().fill(CM.border).frame(height: 1)
+                    messages
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    composer
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(100)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationBarHidden(true)
         .toolbar { KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEditor) { NavigationStack { CharacterEditorView(characterID: app.activeCharacter.id) } }
@@ -90,6 +96,7 @@ struct ChatView: View {
                     Image(systemName: app.isChatListening ? "stop.fill" : "mic.fill").frame(width: 44, height: 44).overlay(Rectangle().stroke(app.isChatListening ? CM.red : CM.border))
                 }
                 TextField("MESSAGE_\(app.activeCharacter.name.uppercased())", text: $app.composerText, axis: .vertical)
+                    .accessibilityIdentifier("chat.composer.textfield")
                     .font(.body.monospaced()).lineLimit(1...4).focused($focused).submitLabel(.send)
                     .onSubmit { if !app.composerText.isEmpty { app.sendComposer() } }
                     .padding(10).frame(minHeight: 44).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
@@ -100,7 +107,11 @@ struct ChatView: View {
                 }
                 .disabled(!app.ai.isGenerating && app.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(10)
-        }.background(CM.background)
+        }
+        .frame(maxWidth: .infinity)
+        .background(CM.background)
+        .zIndex(50)
+        .accessibilityIdentifier("chat.composer")
     }
 }
 

@@ -1,8 +1,8 @@
-# Castmind V3.1
+# Castmind V3.1.1
 
 Castmind es una app iOS local para crear y conversar con personajes IA independientes. El modelo, memoria, voz y datos funcionan en el iPhone; no necesita OpenAI ni ElevenLabs.
 
-## V3.1
+## V3.1.1
 
 Esta revisión está centrada en estabilidad real en iPhone:
 

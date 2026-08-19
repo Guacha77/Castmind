@@ -1,3 +1,10 @@
+# Castmind V3.1.1
+
+- Composer de Chat y Salas movido a un layout explícitamente acotado con `GeometryReader` + `VStack`, evitando la desaparición causada por `safeAreaInset` anidados.
+- Composer fijado con prioridad de layout alta, `zIndex` y altura intrínseca.
+- Añadidos identificadores de accesibilidad para verificar los campos de entrada.
+- Build/version 3.1.1 / 311.
+
 # Castmind V3.1 — Stability & Input Update
 
 ## Cambios principales
@@ -18,4 +25,4 @@
 - Corregido un guardado duplicado de avatar.
 - Launch screen simplificado al sistema moderno `UILaunchScreen`; se elimina el storyboard legacy.
 - `Info.plist` es usado directamente por Xcode (`INFOPLIST_FILE`, `GENERATE_INFOPLIST_FILE=NO`).
-- Versión 3.1.0, build 310.
+- Versión 3.1.1, build 311.

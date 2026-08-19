@@ -11,6 +11,7 @@ struct RootView: View {
             CM.background.ignoresSafeArea(.all)
             if app.settings.hasCompletedOnboarding {
                 NavigationStack { activeTab }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         if !keyboardVisible { industrialTabBar }
                     }

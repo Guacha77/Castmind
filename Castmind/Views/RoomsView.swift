@@ -55,26 +55,33 @@ struct RoomDetailView: View {
     private var room: CharacterRoom? { app.library.rooms.first(where: { $0.id == roomID }) }
 
     var body: some View {
-        ZStack {
-            CastmindBackground(accent: CM.orange)
-            if let room {
-                VStack(spacing: 0) {
-                    participants(room)
-                    Rectangle().fill(CM.border).frame(height: 1)
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: 10) {
-                                ForEach(room.messages) { RoomMessageRow(message: $0) }
-                                Color.clear.frame(height: 1).id("bottom")
-                            }.padding(12)
-                        }.scrollDismissesKeyboard(.interactively)
-                        .onTapGesture { focused = false }
-                        .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+        GeometryReader { geometry in
+            ZStack {
+                CastmindBackground(accent: CM.orange)
+                if let room {
+                    VStack(spacing: 0) {
+                        participants(room)
+                        Rectangle().fill(CM.border).frame(height: 1)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 10) {
+                                    ForEach(room.messages) { RoomMessageRow(message: $0) }
+                                    Color.clear.frame(height: 1).id("bottom")
+                                }.padding(12)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .scrollDismissesKeyboard(.interactively)
+                            .onTapGesture { focused = false }
+                            .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+                        }
+                        composer
+                            .fixedSize(horizontal: false, vertical: true)
+                            .layoutPriority(100)
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
                 }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationTitle(room?.title.uppercased() ?? "ROOM").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showEdit = true } label: { Image(systemName: "slider.horizontal.3") } }; KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEdit) { EditRoomSheet(roomID: roomID) }
@@ -115,6 +122,7 @@ struct RoomDetailView: View {
                 }
 
                 TextField("MESSAGE_ROOM", text: $text, axis: .vertical)
+                    .accessibilityIdentifier("room.composer.textfield")
                     .font(.body.monospaced())
                     .lineLimit(1...4)
                     .focused($focused)
@@ -135,7 +143,11 @@ struct RoomDetailView: View {
                 }
                 .disabled(!app.ai.isGenerating && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.padding(10)
-        }.background(CM.background)
+        }
+        .frame(maxWidth: .infinity)
+        .background(CM.background)
+        .zIndex(50)
+        .accessibilityIdentifier("room.composer")
     }
 
     private func sendRoomText() {
