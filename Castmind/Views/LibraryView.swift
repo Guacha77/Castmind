@@ -90,6 +90,24 @@ private struct NewCharacterSheet: View {
                 CastmindBackground(accent: CM.orange)
                 ScrollView {
                     VStack(spacing: 0) {
+                        Button {
+                            let id = app.createCharacter()
+                            dismiss(); DispatchQueue.main.async { app.selectCharacter(id, openChat: false) }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text("CREATE_BLANK [+]").font(.headline.monospaced().bold())
+                                    Text("DEFAULT · empieza desde cero con un único prompt de comportamiento").font(.caption).opacity(0.8)
+                                }
+                                Spacer(); Text("→").font(.title2.monospaced())
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(CMPrimaryButtonStyle())
+                        .padding(.bottom, 14)
+
+                        HStack { Text("PRESETS_OPTIONAL").font(.caption2.monospaced().bold()).foregroundStyle(CM.textTertiary); Spacer() }
+                            .padding(.vertical, 8)
+
                         ForEach(CharacterPreset.allCases) { preset in
                             Button {
                                 let id = app.createCharacter(preset: preset)
@@ -104,9 +122,6 @@ private struct NewCharacterSheet: View {
                                 }.padding(15).overlay(alignment: .bottom) { Rectangle().fill(CM.border).frame(height: 1) }
                             }.buttonStyle(.plain)
                         }
-                        Button {
-                            let id = app.createCharacter(); dismiss(); DispatchQueue.main.async { app.selectCharacter(id, openChat: false) }
-                        } label: { Text("CREATE_BLANK [+]").frame(maxWidth: .infinity) }.buttonStyle(CMPrimaryButtonStyle()).padding(.top, 14)
                     }.padding(12)
                 }
             }

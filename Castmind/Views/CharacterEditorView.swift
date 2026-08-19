@@ -38,11 +38,7 @@ struct CharacterEditorView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Guardar") {
-                    if var draft {
-                        let clean = draft.behaviorPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        if clean.isEmpty { draft.behaviorPrompt = draft.effectiveBehavior }
-                        app.updateCharacter(draft)
-                    }
+                    if let draft { app.updateCharacter(draft) }
                     dismiss()
                 }.fontWeight(.bold)
             }
@@ -50,9 +46,9 @@ struct CharacterEditorView: View {
         .onAppear {
             guard let found = app.library.characters.first(where: { $0.id == characterID }) else { return }
             var copy = found
-            if copy.behaviorPrompt?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                copy.behaviorPrompt = copy.effectiveBehavior
-            }
+            // Only migrate characters from V1/V2 that never had the V3 behaviour field.
+            // An explicitly empty string is a real CREATE_BLANK character and must stay blank.
+            if copy.behaviorPrompt == nil { copy.behaviorPrompt = copy.effectiveBehavior }
             draft = copy
         }
         .onChange(of: selectedPhoto) { _, item in
@@ -118,7 +114,16 @@ struct CharacterEditorView: View {
                     .padding(8)
                     .background(Color.black.opacity(0.28))
                     .overlay(Rectangle().stroke(CM.strongBorder))
-                Text("PRIORIDAD_01 / STRICT_BEHAVIOR").font(.caption2.monospaced().bold()).foregroundStyle(CM.orange)
+                let promptCount = c.wrappedValue.behaviorPrompt?.count ?? 0
+                HStack {
+                    Text("PRIORIDAD_01 / STRICT_BEHAVIOR")
+                    Spacer()
+                    Text("\(promptCount) CHR")
+                }.font(.caption2.monospaced().bold()).foregroundStyle(CM.orange)
+                if promptCount > PromptBudgeter.behaviorBudget(for: app.settings.modelChoice) {
+                    Text("LARGE_PROMPT_SAFE · el prompt completo se guarda; en cada turno Castmind selecciona automáticamente sus reglas más relevantes para limitar memoria y evitar cierres.")
+                        .font(.caption2.monospaced()).foregroundStyle(CM.textSecondary)
+                }
             }
         }
     }

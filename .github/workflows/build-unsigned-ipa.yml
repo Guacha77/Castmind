@@ -1,4 +1,4 @@
-name: Build Castmind V3 unsigned IPA
+name: Build Castmind V3.1 unsigned IPA
 
 on:
   workflow_dispatch:
@@ -45,23 +45,24 @@ jobs:
           test -d Castmind.xcodeproj
           xcodebuild -list -project Castmind.xcodeproj
 
-          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' Castmind/Resources/Info.plist
-          /usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' Castmind/Resources/Info.plist | grep -qx 'true'
-          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' Castmind/Resources/Info.plist >/dev/null
+      - name: Validate generated build settings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          plutil -lint Castmind/Resources/Info.plist
           /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' Castmind/Resources/Info.plist | grep -qx 'LaunchBackground'
-
-          xcodebuild -showBuildSettings \
-            -project Castmind.xcodeproj \
-            -scheme Castmind \
-            -configuration Release \
-            -skipPackagePluginValidation \
-            -skipMacroValidation \
-            > build-settings-release.log
-
-          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.0\.0$' build-settings-release.log
-          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 300$' build-settings-release.log
-          grep -E '^[[:space:]]*INFOPLIST_FILE = Castmind/Resources/Info\.plist$' build-settings-release.log
-          grep -E '^[[:space:]]*GENERATE_INFOPLIST_FILE = NO$' build-settings-release.log
+          /usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' Castmind/Resources/Info.plist | grep -qx 'true'
+          if /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' Castmind/Resources/Info.plist >/dev/null 2>&1; then
+            echo 'Legacy UILaunchStoryboardName must not be present.' >&2
+            exit 1
+          fi
+          xcodebuild -showBuildSettings -project Castmind.xcodeproj -scheme Castmind -configuration Release > build-settings.log
+          cat build-settings.log
+          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.1\.0$' build-settings.log
+          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 310$' build-settings.log
+          grep -E '^[[:space:]]*INFOPLIST_FILE = Castmind/Resources/Info\.plist$' build-settings.log
+          grep -E '^[[:space:]]*GENERATE_INFOPLIST_FILE = NO$' build-settings.log
+          grep -E '^[[:space:]]*TARGETED_DEVICE_FAMILY = 1$' build-settings.log
 
       - name: Resolve Swift packages
         run: |
@@ -111,28 +112,27 @@ jobs:
             test -n "$value"
             echo "$key=$value"
           done
-          PACKAGE_TYPE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$APP_PATH/Info.plist")"
-          test "$PACKAGE_TYPE" = "APPL"
-          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
-          test "$SHORT_VERSION" = "3.0.0"
-          BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
-          test "$BUILD_VERSION" = "300"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$APP_PATH/Info.plist")" = 'APPL'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = '3.1.0'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = '310'
+
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
-          file "$APP_PATH/$EXECUTABLE"
-          file "$APP_PATH/$EXECUTABLE" | grep -E 'Mach-O.*arm64'
+          file "$APP_PATH/$EXECUTABLE" | grep -q 'Mach-O 64-bit executable arm64'
 
-          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$APP_PATH/Info.plist"
-          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$APP_PATH/Info.plist" >/dev/null
-          FULL_SCREEN="$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_PATH/Info.plist")"
-          test "$FULL_SCREEN" = "true"
-          COLOR_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' "$APP_PATH/Info.plist")"
-          test "$COLOR_NAME" = "LaunchBackground"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' "$APP_PATH/Info.plist")" = 'true'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' "$APP_PATH/Info.plist")" = 'LaunchBackground'
+          if /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' "$APP_PATH/Info.plist" >/dev/null 2>&1; then
+            echo 'Legacy UILaunchStoryboardName unexpectedly reached final app.' >&2
+            exit 1
+          fi
+
           for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do
             value="$(/usr/libexec/PlistBuddy -c "Print :$permission" "$APP_PATH/Info.plist")"
             test -n "$value"
             echo "$permission=$value"
           done
+
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Package standard unsigned IPA
@@ -154,31 +154,19 @@ jobs:
           test -d ipa-check/Payload/Castmind.app
           test -f ipa-check/Payload/Castmind.app/Info.plist
           ROOT_ITEMS="$(find ipa-check -mindepth 1 -maxdepth 1 -print | wc -l | xargs)"
-          test "$ROOT_ITEMS" = "1"
-          test -d ipa-check/Payload
+          test "$ROOT_ITEMS" = '1'
           APP_COUNT="$(find ipa-check/Payload -maxdepth 1 -type d -name '*.app' | wc -l | xargs)"
-          test "$APP_COUNT" = "1"
+          test "$APP_COUNT" = '1'
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' ipa-check/Payload/Castmind.app/Info.plist)"
           test -f "ipa-check/Payload/Castmind.app/$EXECUTABLE"
-          file "ipa-check/Payload/Castmind.app/$EXECUTABLE" | grep -E 'Mach-O.*arm64'
           plutil -lint ipa-check/Payload/Castmind.app/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' ipa-check/Payload/Castmind.app/Info.plist)" = "3.0.0"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ipa-check/Payload/Castmind.app/Info.plist)" = "300"
-          ! /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' ipa-check/Payload/Castmind.app/Info.plist
-          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' ipa-check/Payload/Castmind.app/Info.plist >/dev/null
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' ipa-check/Payload/Castmind.app/Info.plist)" = "true"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' ipa-check/Payload/Castmind.app/Info.plist)" = "LaunchBackground"
-          for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do
-            value="$(/usr/libexec/PlistBuddy -c "Print :$permission" ipa-check/Payload/Castmind.app/Info.plist)"
-            test -n "$value"
-          done
           echo '--- IPA CONTENTS ---'
           unzip -l Artifacts/Castmind-unsigned.ipa | head -120
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Castmind-V3-unsigned-ipa
+          name: Castmind-V3.1-unsigned-ipa
           path: |
             Artifacts/Castmind-unsigned.ipa
             Artifacts/Castmind-unsigned.ipa.sha256

@@ -71,10 +71,10 @@ struct RoomDetailView: View {
                         .onTapGesture { focused = false }
                         .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
                     }
-                    composer
                 }
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationTitle(room?.title.uppercased() ?? "ROOM").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showEdit = true } label: { Image(systemName: "slider.horizontal.3") } }; KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEdit) { EditRoomSheet(roomID: roomID) }
@@ -93,14 +93,57 @@ struct RoomDetailView: View {
     }
 
     private var composer: some View {
-        HStack(spacing: 8) {
-            TextField("MESSAGE_ROOM", text: $text, axis: .vertical).font(.body.monospaced()).lineLimit(1...4).focused($focused)
-                .padding(10).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
-            Button {
-                if app.ai.isGenerating { app.cancelRoomGeneration() }
-                else { let clean=text.trimmingCharacters(in: .whitespacesAndNewlines); guard !clean.isEmpty else { return }; text=""; focused=false; app.sendToRoom(clean, roomID: roomID) }
-            } label: { Image(systemName: app.ai.isGenerating ? "stop.fill" : "arrow.up").frame(width: 42, height: 42).background(app.ai.isGenerating ? CM.red : CM.orange).foregroundStyle(.black) }
-        }.padding(10).overlay(alignment: .top) { Rectangle().fill(CM.border).frame(height: 1) }
+        VStack(spacing: 0) {
+            Rectangle().fill(CM.border).frame(height: 1)
+            if app.isRoomListening(roomID) {
+                HStack {
+                    Circle().fill(CM.red).frame(width: 7, height: 7)
+                    Text(app.recognizer.transcript.isEmpty ? "LISTENING_TO_ROOM…" : app.recognizer.transcript).lineLimit(1)
+                    Spacer()
+                }
+                .font(.caption.monospaced()).foregroundStyle(CM.textSecondary)
+                .padding(.horizontal, 12).padding(.top, 8)
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    focused = false
+                    Task { await app.toggleRoomMicrophone(roomID: roomID) }
+                } label: {
+                    Image(systemName: app.isRoomListening(roomID) ? "stop.fill" : "mic.fill")
+                        .frame(width: 44, height: 44)
+                        .overlay(Rectangle().stroke(app.isRoomListening(roomID) ? CM.red : CM.border))
+                }
+
+                TextField("MESSAGE_ROOM", text: $text, axis: .vertical)
+                    .font(.body.monospaced())
+                    .lineLimit(1...4)
+                    .focused($focused)
+                    .submitLabel(.send)
+                    .onSubmit { sendRoomText() }
+                    .padding(10)
+                    .frame(minHeight: 44)
+                    .background(CM.elevated)
+                    .overlay(Rectangle().stroke(CM.border))
+
+                Button {
+                    if app.ai.isGenerating { app.cancelRoomGeneration() } else { sendRoomText() }
+                } label: {
+                    Image(systemName: app.ai.isGenerating ? "stop.fill" : "arrow.up")
+                        .frame(width: 44, height: 44)
+                        .background(app.ai.isGenerating ? CM.red : CM.orange)
+                        .foregroundStyle(.black)
+                }
+                .disabled(!app.ai.isGenerating && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.padding(10)
+        }.background(CM.background)
+    }
+
+    private func sendRoomText() {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        text = ""
+        focused = false
+        app.sendToRoom(clean, roomID: roomID)
     }
 }
 

@@ -1,29 +1,21 @@
-# Changelog
+# Castmind V3.1 — Stability & Input Update
 
-## 3.0.0
+## Cambios principales
 
-### Crítico
-- Configuración dual de launch screen (`UILaunchScreen` + storyboard) y checks CI para atacar el viewport legacy/letterboxing visto en iPhone 16.
-- Layout raíz y navegación inferior rehechos; tab bar se oculta con el teclado.
-- Modelo global compartido: ningún personaje puede provocar una recarga de modelo al seleccionarlo.
-- Qwen3 1.7B pasa a ser el equilibrio por defecto para reducir presión de memoria.
-- Gestión explícita de memory warnings y liberación de sesión MLX.
-
-### Comportamiento
-- Un único campo **COMPORTAMIENTO** por personaje.
-- Comportamiento = autoridad de máxima prioridad.
-- Memoria y conversación se tratan como hechos/contexto, no instrucciones.
-- Estado emocional y escenarios dejan de competir con el prompt.
-- Salas single-speaker y sanitización de apropiación de diálogo, también inline.
-
-### Rendimiento/UI
-- Estética industrial simplificada.
-- Avatar sin animación permanente a 30 FPS.
-- Caché de imágenes con límite y avatar redimensionado.
-- Streaming UI throttled.
-- Contexto y max tokens más conservadores.
-- TTS por streaming desactivado de fábrica para evitar verbalizar texto no final.
-
-### Compatibilidad
-- Mantiene bundle id `dev.castmind.localai`.
-- Conserva campos legacy necesarios para cargar datos V2.
+- Composer de Chat anclado con `safeAreaInset`: siempre visible y compatible con teclado.
+- Composer de Salas anclado de la misma forma.
+- Entrada por voz en Salas: el mensaje hablado se envía a todos los personajes de la sala.
+- TTS en Salas en cola: cada personaje puede leer su propio turno sin cortar al anterior.
+- `CREATE_BLANK` pasa a ser la opción principal/predeterminada al crear personajes.
+- Los personajes blank ahora nacen realmente vacíos, sin un preset oculto.
+- Nuevo `PromptBudgeter`: conserva el prompt completo en almacenamiento, pero compila una vista segura por turno cuando es enorme.
+- Ranking determinista de bloques del comportamiento: prioriza identidad, reglas, prohibiciones, forma de hablar y contenido relevante para el mensaje actual.
+- Preflight de tokens antes de crear el `ChatSession` para impedir contextos que excedan el margen seguro de memoria.
+- Mensajes, memorias y transcript de salas limitados por bloque antes de formar el prompt.
+- Generación adaptativa cuando el prompt fuente es muy grande.
+- Speech.framework se drena antes de iniciar el prefill MLX; el recognition task se cancela y `AVAudioEngine` se resetea para liberar recursos rápidamente.
+- Memory warning cancela tanto conversación directa como salas antes de descargar el modelo de RAM.
+- Corregido un guardado duplicado de avatar.
+- Launch screen simplificado al sistema moderno `UILaunchScreen`; se elimina el storyboard legacy.
+- `Info.plist` es usado directamente por Xcode (`INFOPLIST_FILE`, `GENERATE_INFOPLIST_FILE=NO`).
+- Versión 3.1.0, build 310.

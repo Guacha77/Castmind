@@ -100,9 +100,13 @@ final class SpeechRecognizerService: ObservableObject {
             tapInstalled = false
         }
         request?.endAudio()
-        task?.finish()
+        // Cancel instead of finish so Speech.framework releases its decoder immediately before
+        // the local LLM starts its memory-heavy prefill. We already captured the latest partial
+        // transcript above, so waiting for another final callback is unnecessary.
+        task?.cancel()
         request = nil
         task = nil
+        audioEngine.reset()
         isListening = false
         audioLevel = 0
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -191,6 +195,12 @@ final class SpeechSynthesizerService: NSObject, ObservableObject, AVSpeechSynthe
 
     func speak(_ text: String, settings: VoiceSettings, locale: String) {
         stop()
+        enqueue(text, settings: settings, locale: locale)
+    }
+
+    /// Queue speech without interrupting an utterance already playing. Used by rooms so every
+    /// character can speak its own turn in sequence instead of the next turn cutting the previous one.
+    func enqueueSpeech(_ text: String, settings: VoiceSettings, locale: String) {
         enqueue(text, settings: settings, locale: locale)
     }
 

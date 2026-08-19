@@ -7,8 +7,6 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "3.0.0"
-    CURRENT_PROJECT_VERSION: "300"
 packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
@@ -37,14 +35,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.castmind.localai
         PRODUCT_NAME: Castmind
-        MARKETING_VERSION: "3.0.0"
-        CURRENT_PROJECT_VERSION: "300"
+        MARKETING_VERSION: "3.1.0"
+        CURRENT_PROJECT_VERSION: "310"
         INFOPLIST_FILE: Castmind/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: NO
-        GENERATE_INFOPLIST_FILE: NO
     dependencies:
       - package: MLXSwiftLM
         product: MLXLLM

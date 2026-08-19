@@ -18,9 +18,9 @@ struct ChatView: View {
                 if app.settings.showPerformanceHUD { performanceHUD }
                 Rectangle().fill(CM.border).frame(height: 1)
                 messages
-                composer
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationBarHidden(true)
         .toolbar { KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEditor) { NavigationStack { CharacterEditorView(characterID: app.activeCharacter.id) } }
@@ -48,7 +48,7 @@ struct ChatView: View {
                 Text("CHAT / \(app.activeModelChoice.title.uppercased())").font(.caption2.monospaced().bold()).foregroundStyle(CM.textSecondary)
                 Spacer()
                 if app.speaker.isSpeaking { Text("VOICE_OUT").foregroundStyle(CM.green) }
-                if app.recognizer.isListening { Text("MIC_IN").foregroundStyle(CM.orange) }
+                if app.isChatListening { Text("MIC_IN").foregroundStyle(CM.orange) }
             }.font(.caption2.monospaced().bold()).padding(.horizontal, 12).padding(.bottom, 8)
         }
     }
@@ -81,18 +81,18 @@ struct ChatView: View {
     private var composer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(CM.border).frame(height: 1)
-            if app.recognizer.isListening {
+            if app.isChatListening {
                 HStack { Circle().fill(CM.red).frame(width: 7, height: 7); Text(app.recognizer.transcript.isEmpty ? "LISTENING…" : app.recognizer.transcript).lineLimit(1); Spacer() }
                     .font(.caption.monospaced()).foregroundStyle(CM.textSecondary).padding(.horizontal, 12).padding(.top, 8)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button { focused = false; Task { await app.toggleMicrophone() } } label: {
-                    Image(systemName: app.recognizer.isListening ? "stop.fill" : "mic.fill").frame(width: 42, height: 42).overlay(Rectangle().stroke(app.recognizer.isListening ? CM.red : CM.border))
+                    Image(systemName: app.isChatListening ? "stop.fill" : "mic.fill").frame(width: 44, height: 44).overlay(Rectangle().stroke(app.isChatListening ? CM.red : CM.border))
                 }
                 TextField("MESSAGE_\(app.activeCharacter.name.uppercased())", text: $app.composerText, axis: .vertical)
                     .font(.body.monospaced()).lineLimit(1...4).focused($focused).submitLabel(.send)
                     .onSubmit { if !app.composerText.isEmpty { app.sendComposer() } }
-                    .padding(10).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
+                    .padding(10).frame(minHeight: 44).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
                 Button {
                     if app.ai.isGenerating { app.cancelCurrentResponse() } else { focused = false; app.sendComposer() }
                 } label: {
