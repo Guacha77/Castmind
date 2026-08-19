@@ -38,6 +38,7 @@ final class AppState: ObservableObject {
         library = store.loadLibrary()
         settings = store.loadSettings()
         repairLibraryIfNeeded()
+        configureUITestModeIfNeeded()
         NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
@@ -48,6 +49,27 @@ final class AppState: ObservableObject {
                 if self.roomGenerationTask != nil { self.cancelRoomGeneration() }
                 await self.ai.unload()
             }
+        }
+    }
+
+    private func configureUITestModeIfNeeded() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("CASTMIND_UI_TEST") else { return }
+
+        settings.hasCompletedOnboarding = true
+        settings.autoLoadModel = false
+        settings.warmupModel = false
+        settings.showPerformanceHUD = false
+
+        if !library.rooms.contains(where: { $0.title == "UI TEST ROOM" }) {
+            let participants = Array(library.characters.prefix(2).map(\.id))
+            library.rooms.append(CharacterRoom(title: "UI TEST ROOM", participantIDs: participants))
+        }
+
+        if arguments.contains("CASTMIND_UI_TEST_ROOM") {
+            selectedTab = .rooms
+        } else {
+            selectedTab = .chat
         }
     }
 

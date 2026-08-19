@@ -4,31 +4,25 @@ import UIKit
 
 struct ChatView: View {
     @EnvironmentObject private var app: AppState
-    @FocusState private var focused: Bool
     @State private var showEditor = false
     @State private var showMemory = false
     @State private var showConversations = false
     @State private var showStream = false
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                CastmindBackground(accent: CM.orange)
-                VStack(spacing: 0) {
-                    header
-                    if app.settings.showPerformanceHUD { performanceHUD }
-                    Rectangle().fill(CM.border).frame(height: 1)
-                    messages
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    composer
-                        .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(100)
-                }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+        ZStack {
+            CastmindBackground(accent: CM.orange)
+            VStack(spacing: 0) {
+                header
+                if app.settings.showPerformanceHUD { performanceHUD }
+                Rectangle().fill(CM.border).frame(height: 1)
+                messages
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Rectangle().fill(CM.border).frame(height: 1)
+                chatComposer
             }
         }
         .navigationBarHidden(true)
-        .toolbar { KeyboardDoneToolbar { focused = false } }
         .sheet(isPresented: $showEditor) { NavigationStack { CharacterEditorView(characterID: app.activeCharacter.id) } }
         .sheet(isPresented: $showMemory) { NavigationStack { MemoryView(characterID: app.activeCharacter.id) } }
         .sheet(isPresented: $showConversations) { NavigationStack { ConversationListView(characterID: app.activeCharacter.id) } }
@@ -78,40 +72,24 @@ struct ChatView: View {
                 }.padding(12)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onTapGesture { focused = false }
             .onChange(of: app.activeMessages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: app.activeMessages.last?.text) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
         }
     }
 
-    private var composer: some View {
-        VStack(spacing: 0) {
-            Rectangle().fill(CM.border).frame(height: 1)
-            if app.isChatListening {
-                HStack { Circle().fill(CM.red).frame(width: 7, height: 7); Text(app.recognizer.transcript.isEmpty ? "LISTENING…" : app.recognizer.transcript).lineLimit(1); Spacer() }
-                    .font(.caption.monospaced()).foregroundStyle(CM.textSecondary).padding(.horizontal, 12).padding(.top, 8)
-            }
-            HStack(alignment: .bottom, spacing: 8) {
-                Button { focused = false; Task { await app.toggleMicrophone() } } label: {
-                    Image(systemName: app.isChatListening ? "stop.fill" : "mic.fill").frame(width: 44, height: 44).overlay(Rectangle().stroke(app.isChatListening ? CM.red : CM.border))
-                }
-                TextField("MESSAGE_\(app.activeCharacter.name.uppercased())", text: $app.composerText, axis: .vertical)
-                    .accessibilityIdentifier("chat.composer.textfield")
-                    .font(.body.monospaced()).lineLimit(1...4).focused($focused).submitLabel(.send)
-                    .onSubmit { if !app.composerText.isEmpty { app.sendComposer() } }
-                    .padding(10).frame(minHeight: 44).background(CM.elevated).overlay(Rectangle().stroke(CM.border))
-                Button {
-                    if app.ai.isGenerating { app.cancelCurrentResponse() } else { focused = false; app.sendComposer() }
-                } label: {
-                    Image(systemName: app.ai.isGenerating ? "stop.fill" : "arrow.up").frame(width: 42, height: 42).background(app.ai.isGenerating ? CM.red : CM.orange).foregroundStyle(.black)
-                }
-                .disabled(!app.ai.isGenerating && app.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }.padding(10)
-        }
-        .frame(maxWidth: .infinity)
-        .background(CM.background)
-        .zIndex(50)
-        .accessibilityIdentifier("chat.composer")
+    private var chatComposer: some View {
+        MessageComposer(
+            text: $app.composerText,
+            placeholder: "ESCRIBE UN MENSAJE...",
+            accessibilityPrefix: "chat",
+            isGenerating: app.ai.isGenerating,
+            isListening: app.isChatListening,
+            listeningText: app.recognizer.transcript,
+            canSend: !app.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            onSend: { app.sendComposer() },
+            onStop: { app.cancelCurrentResponse() },
+            onMicrophone: { Task { await app.toggleMicrophone() } }
+        )
     }
 }
 

@@ -1,20 +1,19 @@
 import SwiftUI
-import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.scenePhase) private var scenePhase
-    @State private var keyboardVisible = false
 
     var body: some View {
         ZStack {
             CM.background.ignoresSafeArea(.all)
             if app.settings.hasCompletedOnboarding {
-                NavigationStack { activeTab }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if !keyboardVisible { industrialTabBar }
-                    }
+                VStack(spacing: 0) {
+                    NavigationStack { activeTab }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    industrialTabBar
+                }
             } else {
                 OnboardingView()
             }
@@ -24,12 +23,6 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, app.settings.hasCompletedOnboarding, app.settings.autoLoadModel, !app.ai.isReady, !app.ai.isGenerating else { return }
             Task { await app.preloadModel() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.16)) { keyboardVisible = true }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.16)) { keyboardVisible = false }
         }
         .alert("Castmind", isPresented: Binding(get: { app.errorMessage != nil }, set: { if !$0 { app.errorMessage=nil } })) {
             Button("Cerrar", role:.cancel) { app.errorMessage=nil }
@@ -68,6 +61,7 @@ struct RootView: View {
             .frame(maxWidth:.infinity, maxHeight:.infinity)
             .background(app.selectedTab == value ? CM.elevated : .clear)
         }.buttonStyle(.plain)
+        .accessibilityIdentifier("root.tab.\(label.lowercased())")
     }
 }
 
