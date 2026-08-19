@@ -63,18 +63,81 @@ jobs:
             echo "Castmind.app was not produced"
             exit 1
           fi
-          EXECUTABLE="$APP_PATH/Castmind"
+
+          echo "Built app bundle: $APP_PATH"
+          plutil -lint "$APP_PATH/Info.plist"
+          plutil -p "$APP_PATH/Info.plist"
+
+          read_plist_key() {
+            /usr/libexec/PlistBuddy -c "Print :$1" "$APP_PATH/Info.plist"
+          }
+
+          for key in CFBundleIdentifier CFBundleExecutable CFBundleName CFBundlePackageType CFBundleShortVersionString CFBundleVersion; do
+            value="$(read_plist_key "$key")"
+            if [ -z "$value" ]; then
+              echo "Missing or empty Info.plist key: $key"
+              exit 1
+            fi
+            echo "$key=$value"
+          done
+
+          PACKAGE_TYPE="$(read_plist_key CFBundlePackageType)"
+          if [ "$PACKAGE_TYPE" != "APPL" ]; then
+            echo "CFBundlePackageType must be APPL, got: $PACKAGE_TYPE"
+            exit 1
+          fi
+
+          BUNDLE_EXECUTABLE="$(read_plist_key CFBundleExecutable)"
+          EXECUTABLE="$APP_PATH/$BUNDLE_EXECUTABLE"
           if [ ! -f "$EXECUTABLE" ]; then
             echo "Executable missing at $EXECUTABLE"
             exit 1
           fi
-          rm -rf Payload Artifacts
-          mkdir -p Payload Artifacts
+
+          rm -rf Payload Artifacts ipa-check
+          mkdir -p Payload Artifacts ipa-check
           cp -R "$APP_PATH" Payload/Castmind.app
           /usr/bin/zip -qry Artifacts/Castmind-unsigned.ipa Payload
           shasum -a 256 Artifacts/Castmind-unsigned.ipa | tee Artifacts/Castmind-unsigned.ipa.sha256
-          unzip -l Artifacts/Castmind-unsigned.ipa | grep -q 'Payload/Castmind.app/Castmind'
-          unzip -l Artifacts/Castmind-unsigned.ipa | grep -q 'Payload/Castmind.app/'
+
+          unzip -t Artifacts/Castmind-unsigned.ipa
+          unzip -l Artifacts/Castmind-unsigned.ipa | head -100
+          unzip -q Artifacts/Castmind-unsigned.ipa -d ipa-check
+
+          test -d ipa-check/Payload/Castmind.app
+          test -f ipa-check/Payload/Castmind.app/Info.plist
+          test -f "ipa-check/Payload/Castmind.app/$BUNDLE_EXECUTABLE"
+
+          APP_COUNT="$(find ipa-check/Payload -maxdepth 1 -name '*.app' -type d | wc -l | tr -d ' ')"
+          if [ "$APP_COUNT" != "1" ]; then
+            echo "Expected exactly one .app inside Payload, found: $APP_COUNT"
+            find ipa-check/Payload -maxdepth 1 -name '*.app' -type d
+            exit 1
+          fi
+
+          TOP_LEVEL_COUNT="$(find ipa-check -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+          if [ "$TOP_LEVEL_COUNT" != "1" ] || [ ! -d ipa-check/Payload ]; then
+            echo "IPA root must contain only Payload/"
+            find ipa-check -mindepth 1 -maxdepth 1
+            exit 1
+          fi
+
+          plutil -lint ipa-check/Payload/Castmind.app/Info.plist
+          plutil -p ipa-check/Payload/Castmind.app/Info.plist
+
+          for key in CFBundleIdentifier CFBundleExecutable CFBundleName CFBundlePackageType CFBundleShortVersionString CFBundleVersion; do
+            value="$(/usr/libexec/PlistBuddy -c "Print :$key" ipa-check/Payload/Castmind.app/Info.plist)"
+            if [ -z "$value" ]; then
+              echo "Missing or empty extracted Info.plist key: $key"
+              exit 1
+            fi
+          done
+
+          EXTRACTED_PACKAGE_TYPE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' ipa-check/Payload/Castmind.app/Info.plist)"
+          if [ "$EXTRACTED_PACKAGE_TYPE" != "APPL" ]; then
+            echo "Extracted CFBundlePackageType must be APPL, got: $EXTRACTED_PACKAGE_TYPE"
+            exit 1
+          fi
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
