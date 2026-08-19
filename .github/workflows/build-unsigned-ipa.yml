@@ -45,6 +45,23 @@ jobs:
           test -d Castmind.xcodeproj
           xcodebuild -list -project Castmind.xcodeproj
 
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' Castmind/Resources/Info.plist | grep -qx 'LaunchScreen'
+          /usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' Castmind/Resources/Info.plist | grep -qx 'true'
+          /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' Castmind/Resources/Info.plist | grep -qx 'LaunchBackground'
+
+          xcodebuild -showBuildSettings \
+            -project Castmind.xcodeproj \
+            -scheme Castmind \
+            -configuration Release \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            > build-settings-release.log
+
+          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.0\.0$' build-settings-release.log
+          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 300$' build-settings-release.log
+          grep -E '^[[:space:]]*INFOPLIST_FILE = Castmind/Resources/Info\.plist$' build-settings-release.log
+          grep -E '^[[:space:]]*GENERATE_INFOPLIST_FILE = NO$' build-settings-release.log
+
       - name: Resolve Swift packages
         run: |
           set -o pipefail
@@ -95,6 +112,10 @@ jobs:
           done
           PACKAGE_TYPE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$APP_PATH/Info.plist")"
           test "$PACKAGE_TYPE" = "APPL"
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
+          test "$SHORT_VERSION" = "3.0.0"
+          BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
+          test "$BUILD_VERSION" = "300"
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
           file "$APP_PATH/$EXECUTABLE"
@@ -105,6 +126,11 @@ jobs:
           test "$FULL_SCREEN" = "true"
           COLOR_NAME="$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' "$APP_PATH/Info.plist")"
           test "$COLOR_NAME" = "LaunchBackground"
+          for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do
+            value="$(/usr/libexec/PlistBuddy -c "Print :$permission" "$APP_PATH/Info.plist")"
+            test -n "$value"
+            echo "$permission=$value"
+          done
           find "$APP_PATH" -name 'LaunchScreen.storyboardc' -print | grep -q 'LaunchScreen.storyboardc'
 
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
@@ -135,6 +161,15 @@ jobs:
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' ipa-check/Payload/Castmind.app/Info.plist)"
           test -f "ipa-check/Payload/Castmind.app/$EXECUTABLE"
           plutil -lint ipa-check/Payload/Castmind.app/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' ipa-check/Payload/Castmind.app/Info.plist)" = "3.0.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ipa-check/Payload/Castmind.app/Info.plist)" = "300"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchStoryboardName' ipa-check/Payload/Castmind.app/Info.plist)" = "LaunchScreen"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' ipa-check/Payload/Castmind.app/Info.plist)" = "true"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' ipa-check/Payload/Castmind.app/Info.plist)" = "LaunchBackground"
+          for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do
+            value="$(/usr/libexec/PlistBuddy -c "Print :$permission" ipa-check/Payload/Castmind.app/Info.plist)"
+            test -n "$value"
+          done
           echo '--- IPA CONTENTS ---'
           unzip -l Artifacts/Castmind-unsigned.ipa | head -120
 
