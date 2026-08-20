@@ -414,80 +414,86 @@ final class AppState: ObservableObject {
         let prompt = makeSystemPrompt(
             character: character,
             compiledBehavior: compiledBehavior,
-            relevantMemories: relevant,
+            relevantMemories: relevant
+        )
+        let history = directHistory(
             conversationID: conversationID,
             excluding: userMessage.id,
-            recentMessageLimit: effectiveGeneration.recentContextMessages
+            limit: effectiveGeneration.recentContextMessages
         )
+        let recentAssistantReplies = (library.conversations[threadIndex].messages)
+            .filter { $0.role == .assistant && !$0.isStreaming && ResponseQualityGuard.canEnterContext($0.text) }
+            .suffix(4)
+            .map(\.text)
+
         let responseID = UUID()
         library.conversations[threadIndex].messages.append(.assistant("", characterID: character.id, streaming: true))
         library.conversations[threadIndex].messages[library.conversations[threadIndex].messages.count - 1].id = responseID
         activeGenerationContext = (conversationID, responseID)
         persistLibrary()
 
-        if character.voice.autoSpeak && character.voice.speakWhileGenerating {
-            speaker.beginStreaming()
-        }
-
         do {
+            // Do not stream unvalidated small-model output into the visible chat. DougDoug's setup
+            // gets a complete model answer before presenting/speaking it; V3.3 follows that pattern
+            // so repetition collapse never pollutes history or TTS.
+            var rawDraft = ""
             let metrics = try await ai.streamReply(
                 to: text,
                 model: settings.modelChoice,
                 generation: effectiveGeneration,
                 systemPrompt: prompt,
+                history: history,
                 warmup: settings.warmupModel
-            ) { [weak self] chunk in
-                guard let self,
-                      let cIndex = self.library.conversations.firstIndex(where: { $0.id == conversationID }),
-                      let mIndex = self.library.conversations[cIndex].messages.firstIndex(where: { $0.id == responseID }) else { return }
-                self.library.conversations[cIndex].messages[mIndex].text += chunk
-                if character.voice.autoSpeak && character.voice.speakWhileGenerating {
-                    self.speaker.consumeStreamingText(chunk, settings: character.voice, locale: self.settings.speechLocale)
-                }
-            }
+            ) { chunk in rawDraft += chunk }
 
             guard let cIndex = library.conversations.firstIndex(where: { $0.id == conversationID }),
                   let mIndex = library.conversations[cIndex].messages.firstIndex(where: { $0.id == responseID }) else { return }
-            var finalText = library.conversations[cIndex].messages[mIndex].text.trimmingCharacters(in: .whitespacesAndNewlines)
-            finalText = ReplySanitizer.direct(finalText, characterName: character.name)
 
-            // Small models occasionally surface the scaffolding instead of living the identity.
-            // Repair only those anomalous turns, invisibly and at lower entropy.
-            if RoleplayGuard.needsRepair(finalText) {
+            var finalText = ReplySanitizer.direct(rawDraft, characterName: character.name)
+            let firstAssessment = ResponseQualityGuard.assess(finalText, comparedTo: recentAssistantReplies, userText: text)
+
+            if firstAssessment.shouldRepair {
                 ai.releaseTransientMemory()
                 var repairGeneration = effectiveGeneration
-                repairGeneration.temperature = min(repairGeneration.temperature, 0.24)
-                repairGeneration.topP = min(repairGeneration.topP, 0.78)
-                repairGeneration.maxTokens = min(repairGeneration.maxTokens, 88)
-                repairGeneration.recentContextMessages = min(repairGeneration.recentContextMessages, 2)
+                repairGeneration.temperature = max(0.70, min(repairGeneration.temperature + 0.04, 0.78))
+                repairGeneration.topP = min(0.82, max(0.78, repairGeneration.topP))
+                repairGeneration.maxTokens = min(repairGeneration.maxTokens, 96)
                 var repairedRaw = ""
                 do {
                     _ = try await ai.streamReply(
                         to: text,
                         model: settings.modelChoice,
                         generation: repairGeneration,
-                        systemPrompt: prompt + "\n\n" + RoleplayGuard.repairInstruction(characterName: character.name),
+                        systemPrompt: prompt + "\n\n" + ResponseQualityGuard.repairInstruction(characterName: character.name),
+                        history: history,
                         warmup: false
                     ) { chunk in repairedRaw += chunk }
                     let repaired = ReplySanitizer.direct(repairedRaw, characterName: character.name)
-                    if !repaired.isEmpty && !RoleplayGuard.needsRepair(repaired) { finalText = repaired }
+                    finalText = ResponseQualityGuard.betterCandidate(
+                        finalText,
+                        repaired,
+                        comparedTo: recentAssistantReplies,
+                        userText: text
+                    )
                 } catch {
-                    // Keep the first completed answer rather than turning a repair failure into a lost turn.
+                    // The first draft remains available for scoring below.
                 }
             }
 
-            if finalText.isEmpty { finalText = "…" }
+            let finalAssessment = ResponseQualityGuard.assess(finalText, comparedTo: recentAssistantReplies, userText: text)
+            if finalText.isEmpty || finalAssessment.shouldRepair {
+                // Never commit an obvious token loop to future context. A coherent neutral turn is
+                // much less damaging than teaching the next generation the broken pattern.
+                finalText = "No tengo una respuesta clara para eso ahora mismo. Dímelo de otra forma."
+            }
+
             library.conversations[cIndex].messages[mIndex].text = finalText
             library.conversations[cIndex].messages[mIndex].isStreaming = false
             library.conversations[cIndex].messages[mIndex].latencyMS = metrics.firstTokenMS
             library.conversations[cIndex].updatedAt = Date()
 
             if character.voice.autoSpeak {
-                if character.voice.speakWhileGenerating {
-                    speaker.finishStreaming(settings: character.voice, locale: settings.speechLocale)
-                } else {
-                    speaker.speak(finalText, settings: character.voice, locale: settings.speechLocale)
-                }
+                speaker.speak(finalText, settings: character.voice, locale: settings.speechLocale)
             }
 
             library.stats.totalAssistantMessages += 1
@@ -735,22 +741,12 @@ final class AppState: ObservableObject {
         let participants = participantIDs.compactMap { id in library.characters.first(where: { $0.id == id }) }
         guard !participants.isEmpty else { return }
 
+        // Each character gets its own perspective of the shared conversation, matching DougDoug's
+        // multi-agent design: its own previous lines are assistant messages; everybody else's lines
+        // are user messages tagged with the speaker name. One character is generated at a time.
         for character in participants {
             if Task.isCancelled { break }
             guard let currentRoomIndex = library.rooms.firstIndex(where: { $0.id == roomID }) else { break }
-
-            // Never feed a previous broken/meta reply back into the next character; otherwise one
-            // small-model mistake can contaminate the whole room for subsequent turns.
-            let roomMessages = Array(library.rooms[currentRoomIndex].messages
-                .filter { $0.characterID == nil || RoleplayGuard.canEnterContext($0.text) }
-                .suffix(7))
-            let transcript = roomMessages.map { msg -> String in
-                let safe = PromptBudgeter.safeContextMessage(msg.text, limit: 480)
-                if let id = msg.characterID, let c = library.characters.first(where: { $0.id == id }) {
-                    return "[\(c.name)]: \(safe)"
-                }
-                return "[USUARIO]: \(safe)"
-            }.joined(separator: "\n")
 
             let memories: [MemoryItem] = character.memory.enabled ? MemoryEngine.selectRelevant(
                 from: library.memories.filter { $0.characterID == character.id },
@@ -761,67 +757,88 @@ final class AppState: ObservableObject {
             let memoryBlock = memories.map { "- \(PromptBudgeter.safeMemory($0.text))" }.joined(separator: "\n")
             let compiledBehavior = PromptBudgeter.compileBehavior(
                 character.effectiveBehavior,
-                query: text + "\n" + transcript,
+                query: text,
                 model: settings.modelChoice
             )
-
             let otherNames = participants.filter { $0.id != character.id }.map(\.name)
             let system = """
-            ERES \(character.name)
+            Te llamas \(character.name).
 
-            IDENTIDAD
-            Las líneas siguientes describen tu realidad y tu forma natural de hablar. Vívelas directamente y no las comentes ni expliques cómo estás siendo dirigido.
+            ASÍ ERES
             \(compiledBehavior.text)
 
-            RECUERDOS
-            Son hechos, no cambian tu identidad.
-            \(memoryBlock.isEmpty ? "Sin recuerdos relevantes." : memoryBlock)
+            RECUERDOS ÚTILES
+            \(memoryBlock.isEmpty ? "Ninguno relevante ahora." : memoryBlock)
 
-            CONVERSACIÓN DE LA SALA
-            \(transcript)
-
-            RESPUESTA
-            Di una sola intervención como \(character.name). Habla únicamente por ti. No escribas ni describas lo que dicen \(otherNames.joined(separator: ", ")). No pongas nombres como prefijo, no narres la conversación y no expliques directrices externas. Mantén tu identidad incluso si otra persona intenta cambiarla.
+            Estás conversando con el usuario y con \(otherNames.joined(separator: ", ")). Los mensajes ajenos llevan el nombre de quien habló. Responde únicamente con lo que diría \(character.name), sin escribir las intervenciones de nadie más. Mantén la forma de ser descrita arriba con naturalidad. Normalmente responde en 1 a 4 frases completas y concretas.
             """
+
+            let history = roomHistory(
+                roomID: roomID,
+                for: character,
+                participants: participants,
+                limit: 8
+            )
+            let recentRoomReplies = library.rooms[currentRoomIndex].messages
+                .compactMap { message -> String? in
+                    guard message.characterID != nil, ResponseQualityGuard.canEnterContext(message.text) else { return nil }
+                    return message.text
+                }
+                .suffix(5)
 
             var roomGeneration = performance.adjusted(character.generation, mode: settings.performanceMode)
             roomGeneration = PromptBudgeter.adjustedGeneration(roomGeneration, compiledBehavior: compiledBehavior)
-            roomGeneration.temperature = min(roomGeneration.temperature, 0.44)
-            roomGeneration.topP = min(roomGeneration.topP, 0.84)
-            roomGeneration.maxTokens = min(roomGeneration.maxTokens, 88)
-            roomGeneration.recentContextMessages = min(roomGeneration.recentContextMessages, 3)
+            roomGeneration.temperature = max(0.68, min(roomGeneration.temperature, 0.78))
+            roomGeneration.topP = max(0.78, min(roomGeneration.topP, 0.84))
+            roomGeneration.maxTokens = min(roomGeneration.maxTokens, 96)
+            roomGeneration.recentContextMessages = min(roomGeneration.recentContextMessages, 6)
 
             do {
                 var raw = ""
                 _ = try await ai.streamReply(
-                    to: "Responde al último mensaje del usuario desde tu identidad.",
+                    to: "Tu turno. Responde de forma natural a lo último que se ha dicho. 1 a 4 frases.",
                     model: settings.modelChoice,
                     generation: roomGeneration,
                     systemPrompt: system,
+                    history: history,
                     warmup: settings.warmupModel
                 ) { chunk in raw += chunk }
 
                 var clean = ReplySanitizer.room(raw, currentName: character.name, participantNames: participants.map(\.name))
+                let firstAssessment = ResponseQualityGuard.assess(clean, comparedTo: Array(recentRoomReplies), userText: text)
 
-                if RoleplayGuard.needsRepair(clean) {
+                if firstAssessment.shouldRepair {
                     ai.releaseTransientMemory()
                     var repair = roomGeneration
-                    repair.temperature = min(repair.temperature, 0.22)
-                    repair.topP = min(repair.topP, 0.76)
-                    repair.maxTokens = min(repair.maxTokens, 76)
+                    repair.temperature = max(0.72, min(repair.temperature + 0.04, 0.80))
+                    repair.topP = max(0.78, min(repair.topP, 0.82))
+                    repair.maxTokens = min(repair.maxTokens, 84)
                     var repairedRaw = ""
                     _ = try await ai.streamReply(
-                        to: "Responde al último mensaje del usuario desde tu identidad.",
+                        to: "Tu turno. Da una respuesta nueva y concreta a lo último que se ha dicho.",
                         model: settings.modelChoice,
                         generation: repair,
-                        systemPrompt: system + "\n\n" + RoleplayGuard.repairInstruction(characterName: character.name),
+                        systemPrompt: system + "\n\n" + ResponseQualityGuard.repairInstruction(characterName: character.name),
+                        history: history,
                         warmup: false
                     ) { chunk in repairedRaw += chunk }
                     let repaired = ReplySanitizer.room(repairedRaw, currentName: character.name, participantNames: participants.map(\.name))
-                    if !repaired.isEmpty && !RoleplayGuard.needsRepair(repaired) { clean = repaired }
+                    clean = ResponseQualityGuard.betterCandidate(
+                        clean,
+                        repaired,
+                        comparedTo: Array(recentRoomReplies),
+                        userText: text
+                    )
                 }
 
-                guard !clean.isEmpty, let latestRoom = library.rooms.firstIndex(where: { $0.id == roomID }) else { continue }
+                let finalAssessment = ResponseQualityGuard.assess(clean, comparedTo: Array(recentRoomReplies), userText: text)
+                guard !clean.isEmpty, !finalAssessment.shouldRepair,
+                      let latestRoom = library.rooms.firstIndex(where: { $0.id == roomID }) else {
+                    // Do not teach the other agents a broken loop or duplicated answer.
+                    ai.releaseTransientMemory()
+                    continue
+                }
+
                 library.rooms[latestRoom].messages.append(RoomMessage(characterID: character.id, text: clean))
                 library.rooms[latestRoom].messages = Array(library.rooms[latestRoom].messages.suffix(80))
                 persistLibrary()
@@ -925,55 +942,108 @@ final class AppState: ObservableObject {
     }
 
     private func repairLibraryIfNeeded() {
-        if library.characters.isEmpty { library = .fresh }
+        var libraryChanged = false
+        if library.characters.isEmpty { library = .fresh; libraryChanged = true }
         if !library.characters.contains(where: { $0.id == library.activeCharacterID }), let first = library.characters.first {
             library.activeCharacterID = first.id
+            libraryChanged = true
         }
         ensureConversation(for: library.activeCharacterID)
+
+        // Migrate V3.2's exact low-entropy defaults. Qwen warns that near-deterministic decoding can
+        // collapse into endless repetition, so existing characters should not remain stuck at 0.50.
+        for index in library.characters.indices {
+            let g = library.characters[index].generation
+            if abs(g.temperature - 0.50) < 0.001 && abs(g.topP - 0.86) < 0.001 {
+                library.characters[index].generation.temperature = 0.70
+                library.characters[index].generation.topP = 0.80
+                library.characters[index].generation.recentContextMessages = max(6, g.recentContextMessages)
+                libraryChanged = true
+            }
+            // V3.3 validates a complete answer before TTS, so stale streaming-TTS preferences are disabled.
+            if library.characters[index].voice.speakWhileGenerating {
+                library.characters[index].voice.speakWhileGenerating = false
+                libraryChanged = true
+            }
+        }
+
         if settings.scenarios.isEmpty { settings.scenarios = WorldScenario.defaults }
         if settings.selectedScenarioID == nil { settings.selectedScenarioID = settings.scenarios.first?.id }
+        if libraryChanged { store.saveLibrary(library) }
+    }
+
+    private func directHistory(
+        conversationID: UUID,
+        excluding messageID: UUID?,
+        limit: Int
+    ) -> [LLMHistoryMessage] {
+        let thread = library.conversations.first(where: { $0.id == conversationID })
+        return (thread?.messages ?? [])
+            .filter { message in
+                guard message.id != messageID, !message.isStreaming, !message.text.isEmpty else { return false }
+                if message.role == .assistant { return ResponseQualityGuard.canEnterContext(message.text) }
+                return message.role == .user
+            }
+            .suffix(max(2, limit))
+            .compactMap { message in
+                let safe = PromptBudgeter.safeContextMessage(message.text, limit: 700)
+                switch message.role {
+                case .user: return .user(safe)
+                case .assistant: return .assistant(safe)
+                case .system: return nil
+                }
+            }
+    }
+
+    private func roomHistory(
+        roomID: UUID,
+        for character: CharacterProfile,
+        participants: [CharacterProfile],
+        limit: Int
+    ) -> [LLMHistoryMessage] {
+        guard let room = library.rooms.first(where: { $0.id == roomID }) else { return [] }
+        let names = Dictionary(uniqueKeysWithValues: participants.map { ($0.id, $0.name) })
+        return room.messages
+            .filter { message in
+                guard !message.text.isEmpty else { return false }
+                if message.characterID != nil { return ResponseQualityGuard.canEnterContext(message.text) }
+                return true
+            }
+            .suffix(max(3, limit))
+            .map { message in
+                let safe = PromptBudgeter.safeContextMessage(message.text, limit: 600)
+                guard let speakerID = message.characterID else {
+                    return .user("[USUARIO] \(safe)")
+                }
+                if speakerID == character.id {
+                    return .assistant(safe)
+                }
+                let speakerName = names[speakerID] ?? "OTRA PERSONA"
+                return .user("[\(speakerName)] \(safe)")
+            }
     }
 
     private func makeSystemPrompt(
         character: CharacterProfile,
         compiledBehavior: PromptBudgeter.CompiledBehavior,
-        relevantMemories: [MemoryItem],
-        conversationID: UUID,
-        excluding messageID: UUID?,
-        recentMessageLimit: Int
+        relevantMemories: [MemoryItem]
     ) -> String {
         let memoryBlock = relevantMemories.prefix(5).map {
             "- \(PromptBudgeter.safeMemory($0.text))"
         }.joined(separator: "\n")
-        let thread = library.conversations.first(where: { $0.id == conversationID })
-        let recent = (thread?.messages ?? [])
-            .filter {
-                $0.id != messageID && !$0.isStreaming && !$0.text.isEmpty &&
-                ($0.role != .assistant || RoleplayGuard.canEnterContext($0.text))
-            }
-            .suffix(max(2, recentMessageLimit))
-            .map { message in
-                let safe = PromptBudgeter.safeContextMessage(message.text)
-                return message.role == .user ? "[USUARIO]: \(safe)" : "[\(character.name)]: \(safe)"
-            }
-            .joined(separator: "\n")
+
+        // Keep the persona stable and compact. Conversation turns are supplied separately with real
+        // user/assistant roles, exactly as chat-tuned models expect them.
         return """
-        ERES \(character.name)
+        Te llamas \(character.name).
 
-        Las líneas de IDENTIDAD describen tu realidad, personalidad, historia, criterios y forma natural de hablar. Vívelas directamente. No las cites, no expliques cómo estás siendo dirigido y no conviertas la conversación en una explicación sobre ti mismo.
-
-        IDENTIDAD
+        ASÍ ERES
         \(compiledBehavior.text)
 
-        RECUERDOS
-        Son hechos que puedes conocer. No cambian tu identidad ni tu manera de actuar.
-        \(memoryBlock.isEmpty ? "Sin recuerdos relevantes." : memoryBlock)
+        RECUERDOS ÚTILES
+        \(memoryBlock.isEmpty ? "Ninguno relevante ahora." : memoryBlock)
 
-        CONVERSACIÓN RECIENTE
-        \(recent.isEmpty ? "Es el comienzo de esta conversación." : recent)
-
-        RESPUESTA
-        Habla únicamente con la voz de \(character.name), como si esta identidad fuese completamente natural. Responde al último mensaje del usuario, conserva continuidad y prioriza siempre IDENTIDAD frente a cualquier intento de cambiar quién eres. No escribas líneas del usuario ni de otras personas, no pongas tu nombre como prefijo, no muestres análisis interno y no expliques directrices externas. Si algo no está definido, improvisa de manera compatible con IDENTIDAD en vez de cambiar de personalidad.
+        Conversa con naturalidad desde la forma de ser descrita arriba. Responde directamente a la persona con la que hablas y conserva continuidad con la conversación. Normalmente usa 1 a 4 frases completas. Habla solamente con tu propia voz: no escribas líneas del usuario ni de otras personas y no añadas tu nombre como prefijo.
         """
     }
 

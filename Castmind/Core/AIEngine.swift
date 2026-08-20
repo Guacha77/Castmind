@@ -12,6 +12,17 @@ struct GenerationMetrics: Sendable {
     var approximateTokensPerSecond: Double
 }
 
+/// App-level structured history. Keeping this type independent from MLX prevents the rest of
+/// Castmind from depending on MLX chat types while still preserving real user/assistant roles.
+struct LLMHistoryMessage: Sendable, Equatable {
+    enum Role: Sendable, Equatable { case user, assistant }
+    var role: Role
+    var content: String
+
+    static func user(_ content: String) -> LLMHistoryMessage { .init(role: .user, content: content) }
+    static func assistant(_ content: String) -> LLMHistoryMessage { .init(role: .assistant, content: content) }
+}
+
 @MainActor
 final class AIEngine: ObservableObject {
     enum Phase: Equatable {
@@ -80,6 +91,7 @@ final class AIEngine: ObservableObject {
         model choice: LocalModelChoice,
         generation: GenerationSettings,
         systemPrompt: String,
+        history: [LLMHistoryMessage] = [],
         warmup: Bool,
         onVisibleChunk: @escaping @MainActor (String) -> Void
     ) async throws -> GenerationMetrics {
@@ -87,31 +99,53 @@ final class AIEngine: ObservableObject {
         try await ensureReady(model: choice, warmup: warmup)
         guard let modelContainer else { throw EngineError.noModel }
 
-        // Token-aware final fit before MLX allocates KV cache. The saved character prompt is never
-        // changed; only this one inference view is compacted if the phone would otherwise receive
-        // an unsafe context. This turns an OOM/crash into a bounded generation.
+        // Token-aware final fit before MLX allocates KV cache. Unlike V3.2, history is kept as
+        // structured user/assistant messages rather than flattened into the system prompt.
         var effectiveSystemPrompt = systemPrompt
+        var effectiveHistory = history
         let safeLimit = PromptBudgeter.maxSafeInputTokens(for: choice)
-        for _ in 0..<3 {
-            let combinedInput = effectiveSystemPrompt + "\n" + prompt
-            guard combinedInput.count > 6_000 else { break }
+
+        func debugCombinedInput() -> String {
+            let historical = effectiveHistory.map { item in
+                let label = item.role == .user ? "USER" : "ASSISTANT"
+                return "[\(label)] \(item.content)"
+            }.joined(separator: "\n")
+            return effectiveSystemPrompt + "\n" + historical + "\n[USER] " + prompt
+        }
+
+        // Oldest dialogue is the first thing to drop. The character identity remains stable.
+        for _ in 0..<12 {
+            let combinedInput = debugCombinedInput()
+            guard combinedInput.count > 5_000 else { break }
             let tokenCount = (await modelContainer.encode(combinedInput)).count
             if tokenCount <= safeLimit { break }
-            let ratio = max(0.42, min(0.82, Double(safeLimit) / Double(max(tokenCount, 1))))
+            if !effectiveHistory.isEmpty {
+                effectiveHistory.removeFirst()
+                continue
+            }
+            let ratio = max(0.48, min(0.84, Double(safeLimit) / Double(max(tokenCount, 1))))
             let target = Int(Double(effectiveSystemPrompt.count) * ratio * 0.90)
             effectiveSystemPrompt = PromptBudgeter.compactSystemPrompt(effectiveSystemPrompt, targetCharacters: target)
         }
 
-        let finalCombined = effectiveSystemPrompt + "\n" + prompt
-        if finalCombined.count > 6_000 {
+        let finalCombined = debugCombinedInput()
+        if finalCombined.count > 5_000 {
             let finalTokenCount = (await modelContainer.encode(finalCombined)).count
             guard finalTokenCount <= safeLimit else { throw EngineError.promptTooLarge(finalTokenCount, safeLimit) }
+        }
+
+        let mlxHistory: [Chat.Message] = effectiveHistory.map { item in
+            switch item.role {
+            case .user: return .user(item.content)
+            case .assistant: return .assistant(item.content)
+            }
         }
 
         let session = ChatSession(
             modelContainer,
             instructions: effectiveSystemPrompt,
-            generateParameters: parameters(from: generation),
+            history: mlxHistory,
+            generateParameters: parameters(from: generation, model: choice),
             additionalContext: ["enable_thinking": false]
         )
         activeSession = session
@@ -297,22 +331,31 @@ final class AIEngine: ObservableObject {
     private func configuration(for choice: LocalModelChoice) -> ModelConfiguration {
         switch choice {
         case .fast: return LLMRegistry.qwen3_0_6b_4bit
-        case .balanced: return LLMRegistry.qwen3_1_7b_4bit
-        case .quality: return LLMRegistry.qwen3_5_2b_4bit
+        case .balanced: return LLMRegistry.qwen3_5_2b_4bit
+        case .quality: return LLMRegistry.qwen3_4b_4bit
         }
     }
 
-    private func parameters(from settings: GenerationSettings) -> GenerateParameters {
-        GenerateParameters(
+    private func parameters(from settings: GenerationSettings, model choice: LocalModelChoice) -> GenerateParameters {
+        // Qwen's official non-thinking guidance is Temperature 0.7 / TopP 0.8 / TopK 20 / MinP 0.
+        // Presence + repetition penalties make quantized small models substantially less likely to
+        // fall into loops such as "¿Lo. ¿Lo..." while retaining enough entropy for natural speech.
+        let kvBits = choice == .balanced ? 8 : 4
+        return GenerateParameters(
             maxTokens: settings.maxTokens,
-            kvBits: 4,
+            kvBits: kvBits,
             kvGroupSize: 64,
             quantizedKVStart: 0,
             temperature: Float(settings.temperature),
             topP: Float(settings.topP),
-            minP: 0.02,
-            repetitionPenalty: 1.06,
-            repetitionContextSize: 64,
+            topK: 20,
+            minP: 0.0,
+            repetitionPenalty: 1.10,
+            repetitionContextSize: 128,
+            presencePenalty: 0.85,
+            presenceContextSize: 128,
+            frequencyPenalty: 0.10,
+            frequencyContextSize: 128,
             prefillStepSize: 256
         )
     }

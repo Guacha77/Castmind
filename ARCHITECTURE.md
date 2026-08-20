@@ -1,47 +1,46 @@
-# Castmind V3.1 — Arquitectura
+# Castmind V3.3 — Conversation architecture
 
-## Principios
+## Direct chat
 
-1. **Un modelo global** en RAM.
-2. **Muchos personajes**, cada uno con `behaviorPrompt`, parámetros, voz y memoria independientes.
-3. El prompt de comportamiento es la autoridad principal del personaje.
-4. El prompt fuente se conserva íntegro, pero la inferencia usa una ventana acotada y segura.
-5. El contexto dinámico se mantiene pequeño y factual.
-6. La UI no debe realizar trabajo continuo cuando está en reposo.
+1. User message is persisted.
+2. Character behavior is compiled into a deterministic, bounded identity core.
+3. Relevant memories are selected separately.
+4. Recent conversation is converted to structured roles (`user` / `assistant`).
+5. MLX `ChatSession` is re-hydrated from that history and receives the current turn as a new user message.
+6. The raw draft is held off-screen.
+7. `ReplySanitizer` + `ResponseQualityGuard` validate it.
+8. A failed draft gets one fresh hidden retry with healthy sampling.
+9. Only a validated answer is committed, spoken, bridged to OBS, and allowed into future context.
+10. Session/KV/transient Metal cache is cleared after the turn.
 
-## Flujo de chat
+## Rooms
 
-`input → PromptBudgeter → memoria relevante → strict system prompt → token preflight → MLX stream → UI throttled → ReplySanitizer → persistencia → TTS`
+Every character sees the same room through its own independent perspective:
 
-`PromptBudgeter` evita que un personaje importado o un prompt enorme pueda crear contexto sin límite. Para prompts grandes, selecciona bloques con prioridad por reglas/identidad y relevancia al mensaje. Antes de crear la sesión, `AIEngine` cuenta tokens y rechaza de forma controlada cualquier contexto que siga superando el techo seguro.
+- its own previous room messages -> `assistant`;
+- human messages -> `user` prefixed `[USUARIO]`;
+- other characters -> `user` prefixed `[NOMBRE]`.
 
-## Voz
+Only one character is generated at a time. A malformed/duplicated intervention is never appended to the room, so it cannot contaminate subsequent agents.
 
-`Speech.framework → transcript → stop/cancel recognizer → reset AVAudioEngine → breve drain → PromptBudgeter → MLX`
+This mirrors the important structure in DougDoug's public multi-agent implementation while remaining fully local.
 
-La separación entre STT y prefill MLX reduce el pico de recursos al responder por voz.
+## Models
 
-## Salas
+- FAST: Qwen3 0.6B 4-bit
+- BALANCED / default: Qwen3.5 2B 4-bit
+- QUALITY: Qwen3 4B 4-bit
 
-Cada participante recibe una inferencia separada. La transcripción incluye etiquetas de autores, pero el contrato exige una sola intervención del `PERSONAJE ASIGNADO`. Solo tras sanitizar se añade esa respuesta a la sala. Nunca se publica el stream bruto del modelo en la sala.
+Balanced uses 8-bit KV cache for better conversational fidelity. Other modes use 4-bit KV to preserve RAM headroom.
 
-La entrada por voz de una sala produce un único mensaje del usuario que se entrega al round completo. Las respuestas con TTS activo se encolan por personaje para que una no corte a la anterior.
+## Sampling
 
-## Persistencia
+Conversation generation follows Qwen non-thinking guidance as closely as practical on-device:
 
-La estructura V2/V3 de biblioteca se conserva para que una actualización no pierda datos. `CharacterProfile.behaviorPrompt` es opcional en Codable para poder abrir personajes antiguos; un `CREATE_BLANK` nuevo usa cadena vacía de forma intencional y no se rellena con un preset oculto.
+- temperature around 0.7
+- top-p around 0.8
+- top-k 20
+- min-p 0
+- repetition + presence penalties to suppress loops
 
-## Estabilidad
-
-- 1.7B como default.
-- Límites térmicos en `PerformanceManager`.
-- Prompt/KV context acotado antes de inferencia.
-- `NSCache` para avatares.
-- Memory warning → cancelar chat/sala/voz → unload MLX.
-- `activeSession` de MLX liberada después de cada turno.
-- Modelo global evita churn de RAM al cambiar de personaje.
-- Speech recognizer y audio engine se liberan antes del prefill.
-
-## Full-screen
-
-Castmind usa el mecanismo moderno `UILaunchScreen` con `LaunchBackground` y `UIRequiresFullScreen=true`, sin storyboard legacy. El target usa directamente `Castmind/Resources/Info.plist` mediante `INFOPLIST_FILE` y `GENERATE_INFOPLIST_FILE=NO`. CI inspecciona el `Info.plist` construido y el IPA final.
+Long character prompts reduce context/output budgets, not sampling entropy.

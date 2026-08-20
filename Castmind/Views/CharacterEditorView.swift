@@ -147,7 +147,8 @@ struct CharacterEditorView: View {
             VStack(alignment: .leading, spacing: 11) {
                 CMSectionTitle(title: "Voz")
                 Toggle("Leer respuestas", isOn: c.voice.autoSpeak)
-                Toggle("Hablar mientras genera", isOn: c.voice.speakWhileGenerating).disabled(!c.wrappedValue.voice.autoSpeak)
+                Text("La voz se reproduce solo después de validar la respuesta para no leer loops o borradores defectuosos.")
+                    .font(.caption).foregroundStyle(CM.textSecondary)
                 Picker("Voz", selection: Binding(get: { c.wrappedValue.voice.voiceIdentifier ?? "__system__" }, set: { c.wrappedValue.voice.voiceIdentifier = $0 == "__system__" ? nil : $0 })) {
                     Text("Sistema iOS").tag("__system__")
                     ForEach(app.speaker.spanishVoices, id: \.identifier) { Text("\($0.name) · \($0.language)").tag($0.identifier) }
@@ -161,9 +162,9 @@ struct CharacterEditorView: View {
     private func generation(_ c: Binding<CharacterProfile>) -> some View {
         CMCard {
             VStack(alignment: .leading, spacing: 11) {
-                CMSectionTitle(title: "Generación", subtitle: "Valores conservadores = más obediencia y estabilidad")
-                valueSlider("TEMPERATURA", c.generation.temperature, 0.1...1.0)
-                valueSlider("TOP_P", c.generation.topP, 0.6...1.0)
+                CMSectionTitle(title: "Generación", subtitle: "Qwen funciona mejor con sampling moderado; demasiado bajo puede crear loops")
+                valueSlider("TEMPERATURA", c.generation.temperature, 0.6...1.0)
+                valueSlider("TOP_P", c.generation.topP, 0.7...1.0)
                 Stepper("MAX TOKENS: \(c.wrappedValue.generation.maxTokens)", value: c.generation.maxTokens, in: 48...256, step: 16)
                     .font(.caption.monospaced())
                 DisclosureGroup("AVANZADO", isExpanded: $showAdvanced) {

@@ -13,9 +13,9 @@ enum PromptBudgeter {
     static func behaviorBudget(for model: LocalModelChoice) -> Int {
         // Weight memory + KV cache headroom is tighter on the larger model.
         switch model {
-        case .fast: return 10_000
-        case .balanced: return 8_500
-        case .quality: return 6_500
+        case .fast: return 9_000
+        case .balanced: return 7_500
+        case .quality: return 5_800
         }
     }
 
@@ -23,9 +23,9 @@ enum PromptBudgeter {
         // Conservative iPhone ceilings. The complete saved prompt can be arbitrarily larger;
         // only its per-turn compiled representation is bounded.
         switch model {
-        case .fast: return 5_200
-        case .balanced: return 4_300
-        case .quality: return 3_200
+        case .fast: return 5_000
+        case .balanced: return 3_900
+        case .quality: return 2_800
         }
     }
 
@@ -35,12 +35,13 @@ enum PromptBudgeter {
         model: LocalModelChoice,
         emergency: Bool = false
     ) -> CompiledBehavior {
+        _ = query // Persona compilation is intentionally independent of the current message.
         let originalCount = raw.count
         let normalBudget = behaviorBudget(for: model)
-        let budget = emergency ? max(2_600, Int(Double(normalBudget) * 0.56)) : normalBudget
+        let budget = emergency ? max(2_400, Int(Double(normalBudget) * 0.58)) : normalBudget
 
-        // Never manufacture several copies of a multi-megabyte pasted prompt just before inference.
-        let scan = normalize(boundedScan(raw, maxCharacters: emergency ? 80_000 : 140_000))
+        // Never duplicate a multi-megabyte pasted prompt in memory immediately before inference.
+        let scan = normalize(boundedScan(raw, maxCharacters: emergency ? 70_000 : 120_000))
         guard scan.count > budget else {
             return CompiledBehavior(
                 text: scan,
@@ -55,74 +56,41 @@ enum PromptBudgeter {
             return CompiledBehavior(text: "", originalCharacters: originalCount, effectiveCharacters: 0, wasReduced: true)
         }
 
-        // 80% of the compiled prompt is a stable core selected independently of the current message.
-        // This prevents the character's apparent identity from changing from turn to turn.
-        let coreBudget = Int(Double(budget) * 0.80)
-        let dynamicBudget = budget - coreBudget
-
+        // V3.2 selected ~20% of the persona based on the current user message. On a small model that
+        // effectively changed the character from turn to turn. V3.3 compiles one deterministic core:
+        // opening identity, ending constraints and the highest-density behavioral chunks.
         var selected = Set<Int>()
         var used = 0
 
-        func add(_ index: Int, limit: Int) {
+        func add(_ index: Int) {
             guard chunks.indices.contains(index), !selected.contains(index) else { return }
             let cost = chunks[index].count + 2
-            guard used + cost <= limit else { return }
+            guard used + cost <= budget else { return }
             selected.insert(index)
             used += cost
         }
 
-        // Preserve the opening identity definition and the ending constraints/style whenever possible.
-        add(0, limit: coreBudget)
-        if chunks.count > 1 { add(1, limit: coreBudget) }
-        if chunks.count > 2 { add(chunks.count - 1, limit: coreBudget) }
+        add(0)
+        if chunks.count > 1 { add(1) }
+        if chunks.count > 2 { add(chunks.count - 1) }
+        if chunks.count > 3 { add(chunks.count - 2) }
 
-        let stableRanked = chunks.indices
+        let ranked = chunks.indices
             .filter { !selected.contains($0) }
             .map { index -> (Int, Int) in
-                let density = min(90, chunks[index].count / 28)
-                let positional = index < 4 ? (220 - index * 35) : 0
-                return (index, ruleScore(chunks[index]) + density + positional)
+                let density = min(100, chunks[index].count / 24)
+                let earlyIdentity = index < 5 ? (240 - index * 35) : 0
+                let lateConstraint = index >= max(0, chunks.count - 5) ? 120 : 0
+                return (index, ruleScore(chunks[index]) + density + earlyIdentity + lateConstraint)
             }
             .sorted {
                 if $0.1 != $1.1 { return $0.1 > $1.1 }
                 return $0.0 < $1.0
             }
 
-        for candidate in stableRanked {
-            add(candidate.0, limit: coreBudget)
-            if used >= coreBudget - 180 { break }
-        }
-
-        // Use the remaining budget for details that are specifically relevant to the current turn,
-        // without displacing the stable core above.
-        let terms = significantTerms(query)
-        let dynamicRanked = chunks.indices
-            .filter { !selected.contains($0) }
-            .map { index -> (Int, Int) in
-                let lower = chunks[index].lowercased()
-                var score = 0
-                for term in terms where lower.contains(term) { score += 70 }
-                score += min(80, ruleScore(chunks[index]) / 5)
-                return (index, score)
-            }
-            .filter { $0.1 > 0 }
-            .sorted {
-                if $0.1 != $1.1 { return $0.1 > $1.1 }
-                return $0.0 < $1.0
-            }
-
-        let absoluteLimit = min(budget, used + dynamicBudget)
-        for candidate in dynamicRanked {
-            add(candidate.0, limit: absoluteLimit)
-            if used >= absoluteLimit - 120 { break }
-        }
-
-        // Fill any unused room with the next strongest stable chunks.
-        if used < budget - 200 {
-            for candidate in stableRanked where !selected.contains(candidate.0) {
-                add(candidate.0, limit: budget)
-                if used >= budget - 160 { break }
-            }
+        for candidate in ranked {
+            add(candidate.0)
+            if used >= budget - 160 { break }
         }
 
         if selected.isEmpty {
@@ -165,23 +133,22 @@ enum PromptBudgeter {
     static func adjustedGeneration(_ settings: GenerationSettings, compiledBehavior: CompiledBehavior) -> GenerationSettings {
         var result = settings
 
-        // Small local models obey a detailed identity more reliably at lower sampling entropy.
-        result.temperature = min(result.temperature, 0.52)
-        result.topP = min(result.topP, 0.90)
-        result.maxTokens = min(result.maxTokens, 112)
-        result.recentContextMessages = min(result.recentContextMessages, 5)
+        // Qwen explicitly warns that overly deterministic decoding can collapse into repetition.
+        // Preserve a healthy sampling floor even for characters created under V3.2's 0.50 default.
+        result.temperature = min(0.88, max(0.66, result.temperature))
+        result.topP = min(0.90, max(0.78, result.topP))
+        result.maxTokens = min(result.maxTokens, 120)
+        result.recentContextMessages = min(max(4, result.recentContextMessages), 7)
 
+        // Large personas are controlled by context/output size, not by reducing entropy.
         if compiledBehavior.wasReduced {
-            result.temperature = min(result.temperature, 0.46)
-            result.topP = min(result.topP, 0.86)
-            result.maxTokens = min(result.maxTokens, 96)
-            result.recentContextMessages = min(result.recentContextMessages, 3)
+            result.maxTokens = min(result.maxTokens, 104)
+            result.recentContextMessages = min(result.recentContextMessages, 5)
         }
 
         if compiledBehavior.originalCharacters > 40_000 {
-            result.temperature = min(result.temperature, 0.42)
-            result.maxTokens = min(result.maxTokens, 88)
-            result.recentContextMessages = min(result.recentContextMessages, 2)
+            result.maxTokens = min(result.maxTokens, 92)
+            result.recentContextMessages = min(result.recentContextMessages, 4)
         }
         return result
     }

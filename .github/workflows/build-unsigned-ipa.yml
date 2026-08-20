@@ -1,4 +1,4 @@
-name: Build Castmind V3.2.0 Stability unsigned IPA
+name: Build Castmind V3.3.0 Conversation Engine unsigned IPA
 
 on:
   workflow_dispatch:
@@ -58,8 +58,8 @@ jobs:
           fi
           xcodebuild -showBuildSettings -project Castmind.xcodeproj -scheme Castmind -configuration Release > build-settings.log
           cat build-settings.log
-          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.2\.0$' build-settings.log
-          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 320$' build-settings.log
+          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.3\.0$' build-settings.log
+          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 330$' build-settings.log
           grep -E '^[[:space:]]*INFOPLIST_FILE = Castmind/Resources/Info\.plist$' build-settings.log
           grep -E '^[[:space:]]*GENERATE_INFOPLIST_FILE = NO$' build-settings.log
           grep -E '^[[:space:]]*TARGETED_DEVICE_FAMILY = 1$' build-settings.log
@@ -113,8 +113,8 @@ jobs:
             echo "$key=$value"
           done
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$APP_PATH/Info.plist")" = 'APPL'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = '3.2.0'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = '320'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = '3.3.0'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = '330'
 
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
@@ -166,7 +166,7 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Castmind-V3.2.0-unsigned-ipa
+          name: Castmind-V3.3.0-unsigned-ipa
           path: |
             Artifacts/Castmind-unsigned.ipa
             Artifacts/Castmind-unsigned.ipa.sha256

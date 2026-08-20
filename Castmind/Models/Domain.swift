@@ -95,10 +95,12 @@ struct MemoryItem: Identifiable, Codable, Equatable, Sendable {
 // MARK: - Character
 
 struct GenerationSettings: Codable, Equatable, Sendable {
-    var temperature: Double = 0.50
-    var topP: Double = 0.86
-    var maxTokens: Int = 112
-    var recentContextMessages: Int = 4
+    // Qwen recommends sampling (not greedy / near-greedy decoding) in non-thinking mode.
+    // These defaults deliberately keep enough entropy to avoid the repetition collapse seen on 1–2B models.
+    var temperature: Double = 0.70
+    var topP: Double = 0.80
+    var maxTokens: Int = 120
+    var recentContextMessages: Int = 6
 
     static let `default` = GenerationSettings()
 }
@@ -254,8 +256,8 @@ enum LocalModelChoice: String, Codable, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .fast: return "Qwen3 0.6B"
-        case .balanced: return "Qwen3 1.7B"
-        case .quality: return "Qwen3.5 2B"
+        case .balanced: return "Qwen3.5 2B"
+        case .quality: return "Qwen3 4B"
         }
     }
 
@@ -269,17 +271,17 @@ enum LocalModelChoice: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var subtitle: String {
         switch self {
-        case .fast: return "Muy ligero · respuestas rápidas"
-        case .balanced: return "Equilibrio recomendado · ~1 GB"
-        case .quality: return "Más capaz · ~1.7 GB · usa más RAM"
+        case .fast: return "Muy ligero · solo para máxima velocidad"
+        case .balanced: return "Recomendado · mejor conversación · ~1.7 GB"
+        case .quality: return "Máxima fidelidad local · ~2.5 GB · más RAM"
         }
     }
 
     var modelID: String {
         switch self {
         case .fast: return "mlx-community/Qwen3-0.6B-4bit"
-        case .balanced: return "mlx-community/Qwen3-1.7B-4bit"
-        case .quality: return "mlx-community/Qwen3.5-2B-4bit"
+        case .balanced: return "mlx-community/Qwen3.5-2B-4bit"
+        case .quality: return "mlx-community/Qwen3-4B-4bit"
         }
     }
 }

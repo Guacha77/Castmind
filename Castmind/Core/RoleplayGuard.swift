@@ -4,7 +4,7 @@ import Foundation
 /// it only detects responses that expose the scaffolding of the roleplay or collapse into loops.
 enum RoleplayGuard {
     private static let metaFragments = [
-        "sigo un papel", "seguir un papel", "salirme del papel", "salir del papel",
+        "sigo un papel", "seguir un papel", "salirme del papel", "salir del papel", "lo que sea un papel",
         "estoy interpretando", "interpreto un personaje", "soy un personaje", "como personaje",
         "mi prompt", "el prompt", "mis instrucciones", "estas instrucciones", "instrucciones internas",
         "mis reglas", "reglas que sigo", "me han programado", "fui programad", "estoy programad",
