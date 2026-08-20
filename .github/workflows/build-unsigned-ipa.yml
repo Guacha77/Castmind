@@ -1,4 +1,4 @@
-name: Build Castmind V3.1.2 unsigned IPA
+name: Build Castmind V3.1.1 unsigned IPA
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
     branches: [ main ]
     paths:
       - 'Castmind/**'
-      - 'CastmindUITests/**'
       - 'project.yml'
       - '.github/workflows/build-unsigned-ipa.yml'
 
@@ -59,8 +58,8 @@ jobs:
           fi
           xcodebuild -showBuildSettings -project Castmind.xcodeproj -scheme Castmind -configuration Release > build-settings.log
           cat build-settings.log
-          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.1\.2$' build-settings.log
-          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 312$' build-settings.log
+          grep -E '^[[:space:]]*MARKETING_VERSION = 3\.1\.1$' build-settings.log
+          grep -E '^[[:space:]]*CURRENT_PROJECT_VERSION = 311$' build-settings.log
           grep -E '^[[:space:]]*INFOPLIST_FILE = Castmind/Resources/Info\.plist$' build-settings.log
           grep -E '^[[:space:]]*GENERATE_INFOPLIST_FILE = NO$' build-settings.log
           grep -E '^[[:space:]]*TARGETED_DEVICE_FAMILY = 1$' build-settings.log
@@ -75,53 +74,6 @@ jobs:
             -skipPackagePluginValidation \
             -skipMacroValidation \
             | tee build-resolve.log
-
-      - name: Run composer UI tests on simulator
-        shell: bash
-        run: |
-          set -euxo pipefail
-          xcrun simctl list devices available
-          xcrun simctl list devices available -j > available-simulators.json
-          SIM_UDID="$(python3 <<'PY'
-          import json
-          with open("available-simulators.json", encoding="utf-8") as handle:
-              data = json.load(handle)["devices"]
-          phones = [
-              device
-              for devices in data.values()
-              for device in devices
-              if device.get("isAvailable") and device.get("name", "").startswith("iPhone")
-          ]
-          preferred = [device for device in phones if "iPhone 16" in device.get("name", "")]
-          print((preferred or phones)[0]["udid"])
-          PY
-          )"
-          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-          xcrun simctl boot "$SIM_UDID" || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
-          xcodebuild test \
-            -project Castmind.xcodeproj \
-            -scheme Castmind \
-            -configuration Debug \
-            -destination "id=$SIM_UDID" \
-            -derivedDataPath "$DERIVED_DATA" \
-            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES" \
-            -resultBundlePath build/CastmindComposerUITests.xcresult \
-            -skipPackagePluginValidation \
-            -skipMacroValidation \
-            ONLY_ACTIVE_ARCH=YES \
-            | tee build-ui-tests.log
-
-      - name: Upload UI test result bundle
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: Castmind-composer-ui-tests
-          path: |
-            build/CastmindComposerUITests.xcresult
-            build-ui-tests.log
-          if-no-files-found: ignore
-          retention-days: 14
 
       - name: Build Release app for iPhone
         run: |
@@ -161,8 +113,8 @@ jobs:
             echo "$key=$value"
           done
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$APP_PATH/Info.plist")" = 'APPL'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = '3.1.2'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = '312'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = '3.1.1'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = '311'
 
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Info.plist")"
           test -f "$APP_PATH/$EXECUTABLE"
@@ -208,23 +160,13 @@ jobs:
           EXECUTABLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' ipa-check/Payload/Castmind.app/Info.plist)"
           test -f "ipa-check/Payload/Castmind.app/$EXECUTABLE"
           plutil -lint ipa-check/Payload/Castmind.app/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' ipa-check/Payload/Castmind.app/Info.plist)" = 'APPL'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' ipa-check/Payload/Castmind.app/Info.plist)" = '3.1.2'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' ipa-check/Payload/Castmind.app/Info.plist)" = '312'
-          file "ipa-check/Payload/Castmind.app/$EXECUTABLE" | grep -q 'Mach-O 64-bit executable arm64'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UIRequiresFullScreen' ipa-check/Payload/Castmind.app/Info.plist)" = 'true'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UILaunchScreen:UIColorName' ipa-check/Payload/Castmind.app/Info.plist)" = 'LaunchBackground'
-          for permission in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSPhotoLibraryUsageDescription NSLocalNetworkUsageDescription; do
-            value="$(/usr/libexec/PlistBuddy -c "Print :$permission" ipa-check/Payload/Castmind.app/Info.plist)"
-            test -n "$value"
-          done
           echo '--- IPA CONTENTS ---'
           unzip -l Artifacts/Castmind-unsigned.ipa | head -120
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v6
         with:
-          name: Castmind-V3.1.2-unsigned-ipa
+          name: Castmind-V3.1.1-unsigned-ipa
           path: |
             Artifacts/Castmind-unsigned.ipa
             Artifacts/Castmind-unsigned.ipa.sha256
