@@ -19,11 +19,15 @@ struct ChatView: View {
                 Rectangle().fill(CM.border).frame(height: 1)
                 messages
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .layoutPriority(1)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             composer
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
                 .background(CM.background)
         }
         .navigationBarHidden(true)

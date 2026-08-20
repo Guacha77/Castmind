@@ -10,11 +10,16 @@ struct RootView: View {
         ZStack {
             CM.background.ignoresSafeArea(.all)
             if app.settings.hasCompletedOnboarding {
-                NavigationStack { activeTab }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if !keyboardVisible { industrialTabBar }
+                VStack(spacing: 0) {
+                    NavigationStack { activeTab }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if !keyboardVisible {
+                        industrialTabBar
+                            .fixedSize(horizontal: false, vertical: true)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 OnboardingView()
             }

@@ -69,17 +69,21 @@ struct RoomDetailView: View {
                             }.padding(12)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .layoutPriority(1)
                         .scrollDismissesKeyboard(.interactively)
                         .onTapGesture { focused = false }
                         .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if room != nil {
                 composer
                     .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
                     .background(CM.background)
             }
         }
