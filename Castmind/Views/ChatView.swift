@@ -1,4 +1,4 @@
-import Foundation
+﻿import Foundation
 import SwiftUI
 import UIKit
 
@@ -18,9 +18,14 @@ struct ChatView: View {
                 Rectangle().fill(CM.border).frame(height: 1)
                 messages
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
                 Rectangle().fill(CM.border).frame(height: 1)
                 chatComposer
             }
+            .background(CM.background)
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showEditor) { NavigationStack { CharacterEditorView(characterID: app.activeCharacter.id) } }
@@ -111,7 +116,7 @@ private struct IndustrialMessage: View {
                     Text(message.role == .user ? "YOU" : character.name.uppercased()).font(.caption2.monospaced().bold()).foregroundStyle(message.role == .user ? CM.orange : CM.textSecondary)
                     if message.isStreaming { Text("LIVE").font(.caption2.monospaced().bold()).foregroundStyle(CM.green) }
                 }
-                Text(message.text.isEmpty && message.isStreaming ? "▍" : message.text)
+                Text(message.text.isEmpty && message.isStreaming ? "â–" : message.text)
                     .font(.body).foregroundStyle(.white).textSelection(.enabled)
                     .padding(11).frame(maxWidth: .infinity, alignment: .leading)
                     .background(message.role == .user ? CM.elevated2 : CM.elevated)
@@ -119,7 +124,7 @@ private struct IndustrialMessage: View {
                     .gesture(DragGesture(minimumDistance: 18).onEnded { v in if message.role == .assistant && v.translation.width < -50 { showInsight = true; onInsight() } })
                     .contextMenu {
                         Button("Copiar") { UIPasteboard.general.string = message.text }
-                        if message.role == .assistant { Button("Reproducir") { onReplay() }; Button("Explicación") { showInsight = true; onInsight() }; Button("Regenerar") { onRegenerate() } }
+                        if message.role == .assistant { Button("Reproducir") { onReplay() }; Button("ExplicaciÃ³n") { showInsight = true; onInsight() }; Button("Regenerar") { onRegenerate() } }
                         Button("Eliminar", role: .destructive) { onDelete() }
                     }
                 if message.role == .assistant, let latency = message.latencyMS { Text("TTFT_\(latency)MS").font(.caption2.monospaced()).foregroundStyle(CM.textTertiary) }
@@ -135,3 +140,4 @@ private struct IndustrialMessage: View {
         }
     }
 }
+

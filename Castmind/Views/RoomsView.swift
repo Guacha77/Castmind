@@ -1,4 +1,4 @@
-import SwiftUI
+﻿import SwiftUI
 
 struct RoomsView: View {
     @EnvironmentObject private var app: AppState
@@ -43,7 +43,7 @@ private struct RoomRow: View {
                 Text(room.title.uppercased()).font(.headline.monospaced().bold()).foregroundStyle(.white)
                 Text(names.uppercased()).font(.caption2.monospaced()).foregroundStyle(CM.textSecondary).lineLimit(1)
             }
-            Spacer(); Text("\(room.messages.count)").font(.caption.monospacedDigit()).foregroundStyle(CM.textTertiary); Text("→").foregroundStyle(CM.orange)
+            Spacer(); Text("\(room.messages.count)").font(.caption.monospacedDigit()).foregroundStyle(CM.textTertiary); Text("â†’").foregroundStyle(CM.orange)
         }.padding(.vertical, 15).overlay(alignment: .bottom) { Rectangle().fill(CM.border).frame(height: 1) }
     }
 }
@@ -74,7 +74,6 @@ struct RoomDetailView: View {
                         .onChange(of: room.messages.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
                     }
                     Rectangle().fill(CM.border).frame(height: 1)
-                    roomComposer
                 }
             }
         }
@@ -162,3 +161,4 @@ private struct EditRoomSheet: View {
         }.navigationTitle("Editar sala").toolbar { ToolbarItem(placement:.cancellationAction){Button("Cancelar"){dismiss()}}; ToolbarItem(placement:.confirmationAction){Button("Guardar"){ guard var r=app.library.rooms.first(where:{$0.id==roomID}) else{return}; r.title=title.isEmpty ? "Sala":title; r.participantIDs=Array(selected); app.updateRoom(r); dismiss() }.disabled(selected.isEmpty)} }.onAppear{ guard let r=app.library.rooms.first(where:{$0.id==roomID}) else{return}; title=r.title; selected=Set(r.participantIDs) } }
     }
 }
+
