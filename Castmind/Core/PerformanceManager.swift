@@ -22,8 +22,8 @@ final class PerformanceManager: ObservableObject {
         if mode == .automatic {
             switch thermalState {
             case .serious, .critical: effectiveMode = .battery
-            case .fair: effectiveMode = .balanced
-            default: effectiveMode = .maximum
+            case .fair: effectiveMode = .battery
+            default: effectiveMode = .balanced
             }
         } else {
             effectiveMode = mode

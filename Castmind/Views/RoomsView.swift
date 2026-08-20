@@ -3,6 +3,7 @@ import SwiftUI
 struct RoomsView: View {
     @EnvironmentObject private var app: AppState
     @State private var showCreate = false
+    @State private var pendingDelete: CharacterRoom?
 
     var body: some View {
         ZStack {
@@ -19,7 +20,19 @@ struct RoomsView: View {
                         HStack { Text("ROOM_INDEX").font(.caption.monospaced().bold()).foregroundStyle(CM.textSecondary); Spacer(); Button("NEW [+]") { showCreate = true }.font(.caption.monospaced().bold()).foregroundStyle(CM.orange) }
                             .padding(.vertical, 12)
                         ForEach(app.library.rooms) { room in
-                            NavigationLink { RoomDetailView(roomID: room.id) } label: { RoomRow(room: room) }.buttonStyle(.plain)
+                            HStack(spacing: 0) {
+                                NavigationLink { RoomDetailView(roomID: room.id) } label: { RoomRow(room: room) }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity)
+                                Button { pendingDelete = room } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(CM.red)
+                                        .frame(width: 44, height: 52)
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Eliminar sala \(room.title)")
+                            }
                         }
                     }.padding(12)
                 }
@@ -28,6 +41,20 @@ struct RoomsView: View {
         .navigationTitle("SALAS").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showCreate = true } label: { Image(systemName: "plus") } } }
         .sheet(isPresented: $showCreate) { CreateRoomSheet() }
+        .confirmationDialog("Eliminar sala", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), titleVisibility: .visible) {
+            if let room = pendingDelete {
+                Button("Eliminar \(room.title)", role: .destructive) {
+                    app.deleteRoom(room.id)
+                    pendingDelete = nil
+                }
+            }
+            Button("Cancelar", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("Se borrará la sala y todo su historial.")
+        }
     }
 }
 

@@ -1,28 +1,30 @@
-# Castmind V3.1.1
+# Castmind V3.2.0 Stability
 
-Castmind es una app iOS local para crear y conversar con personajes IA independientes. El modelo, memoria, voz y datos funcionan en el iPhone; no necesita OpenAI ni ElevenLabs.
+Castmind es una app iOS local para conversar con personajes mediante modelos MLX sin API externa.
 
-## V3.1.1
+Esta versión parte de V3.1.1 + Composer Layout Fix y se centra en tres objetivos:
+1. que la app sobreviva conversaciones largas sin acumular memoria MLX;
+2. que personajes con prompts muy grandes mantengan identidad y coherencia;
+3. que las salas sean utilizables y borrables.
 
-Esta revisión está centrada en estabilidad real en iPhone:
+## Modelo recomendado
+Qwen3 1.7B sigue siendo la opción recomendada para sesiones largas. Qwen3.5 2B funciona con protecciones de memoria más agresivas, pero usa más RAM por sus pesos.
 
-- Chat y salas con barra de escritura persistente.
-- Voz en chat y salas.
-- Create Blank como flujo principal.
-- Prompts de comportamiento muy grandes con ventana de inferencia segura.
-- Preflight de tokens antes de MLX para evitar presión de memoria no acotada.
-- TTS en cola en salas.
-- Menos solapamiento de Speech.framework + MLX al responder por voz.
-- Full-screen/launch moderno sin storyboard legacy.
+## Instalación sobre el repo existente
 
-El prompt completo de cada personaje se conserva. Si supera la ventana segura configurada para el modelo, Castmind selecciona de forma determinista los bloques más importantes/relevantes para el turno y limita además historial/memorias antes de construir el contexto.
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\DEPLOY_V3_2_TO_EXISTING_REPO.ps1 -RepoPath "C:\Users\chagu\Documents\Castmind"
+```
 
-## Modelo
+Después:
 
-- Rápido: Qwen3 0.6B 4-bit
-- Equilibrado (default): Qwen3 1.7B 4-bit
-- Calidad: Qwen3.5 2B 4-bit
+```powershell
+cd "C:\Users\chagu\Documents\Castmind"
+git status
+git add .
+git commit -m "Castmind V3.2 stability and role fidelity"
+git push
+```
 
-## Instalación
-
-Lee `INSTALL_V3_1_ES.md`.
+GitHub Actions generará el artifact `Castmind-V3.2.0-unsigned-ipa`.

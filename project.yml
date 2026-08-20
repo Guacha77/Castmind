@@ -11,6 +11,9 @@ packages:
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     exactVersion: 3.31.4
+  MLXSwift:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.31.4
   SwiftHuggingFace:
     url: https://github.com/huggingface/swift-huggingface
     exactVersion: 0.9.0
@@ -35,8 +38,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.castmind.localai
         PRODUCT_NAME: Castmind
-        MARKETING_VERSION: "3.1.1"
-        CURRENT_PROJECT_VERSION: "311"
+        MARKETING_VERSION: "3.2.0"
+        CURRENT_PROJECT_VERSION: "320"
         INFOPLIST_FILE: Castmind/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -44,6 +47,8 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: NO
     dependencies:
+      - package: MLXSwift
+        product: MLX
       - package: MLXSwiftLM
         product: MLXLLM
       - package: MLXSwiftLM

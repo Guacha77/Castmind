@@ -1,28 +1,30 @@
-# Castmind V3.1.1
+# Castmind V3.2.0 — Stability & Role Fidelity
 
-- Composer de Chat y Salas movido a un layout explícitamente acotado con `GeometryReader` + `VStack`, evitando la desaparición causada por `safeAreaInset` anidados.
-- Composer fijado con prioridad de layout alta, `zIndex` y altura intrínseca.
-- Añadidos identificadores de accesibilidad para verificar los campos de entrada.
-- Build/version 3.1.1 / 311.
+## Estabilidad de IA local
+- Límite explícito de caché reutilizable de MLX para impedir que la memoria crezca entre turnos.
+- Limpieza de buffers transitorios después de cada generación, cancelación, warm-up y descarga.
+- KV cache cuantizada a 4-bit para reducir de forma fuerte el coste de contexto durante generación.
+- Prefill en bloques más pequeños para bajar el pico de memoria de prompts largos.
+- Presupuesto de contexto más conservador según tamaño del modelo.
+- Compactación token-aware de último recurso antes de crear el KV cache: un prompt enorme se reduce para ese turno en vez de intentar una asignación peligrosa.
+- Mayor separación temporal entre Speech.framework y MLX tras terminar una grabación.
+- Perfil automático prioriza estabilidad térmica en lugar de usar siempre el perfil máximo.
 
-# Castmind V3.1 — Stability & Input Update
+## Fidelidad de personaje
+- Nuevo compilador de comportamiento estable: el 80% del prompt efectivo es un núcleo fijo que no cambia con cada mensaje.
+- El prompt original del personaje se conserva completo; solo se compacta la vista usada por inferencia.
+- Nuevo wrapper de identidad menos propenso a provocar comentarios meta sobre “papeles”, “roles” o instrucciones.
+- Respuestas meta o con loops se detectan y se reparan una sola vez a baja temperatura.
+- Respuestas rotas no vuelven a entrar en el contexto de los siguientes turnos.
+- Menor temperatura/top-p efectiva cuando el prompt es grande para mejorar coherencia y obediencia.
+- Penalización ligera de repetición para evitar bucles de modelos pequeños.
 
-## Cambios principales
+## Salas
+- El mismo sistema de identidad, memoria y estabilidad se aplica a cada participante.
+- Los mensajes meta defectuosos no contaminan a los siguientes personajes.
+- Reparación de turnos anómalos antes de guardarlos.
+- Botón de papelera visible en el índice de salas con confirmación de borrado.
+- Se mantiene voz para hablar con toda la sala.
 
-- Composer de Chat anclado con `safeAreaInset`: siempre visible y compatible con teclado.
-- Composer de Salas anclado de la misma forma.
-- Entrada por voz en Salas: el mensaje hablado se envía a todos los personajes de la sala.
-- TTS en Salas en cola: cada personaje puede leer su propio turno sin cortar al anterior.
-- `CREATE_BLANK` pasa a ser la opción principal/predeterminada al crear personajes.
-- Los personajes blank ahora nacen realmente vacíos, sin un preset oculto.
-- Nuevo `PromptBudgeter`: conserva el prompt completo en almacenamiento, pero compila una vista segura por turno cuando es enorme.
-- Ranking determinista de bloques del comportamiento: prioriza identidad, reglas, prohibiciones, forma de hablar y contenido relevante para el mensaje actual.
-- Preflight de tokens antes de crear el `ChatSession` para impedir contextos que excedan el margen seguro de memoria.
-- Mensajes, memorias y transcript de salas limitados por bloque antes de formar el prompt.
-- Generación adaptativa cuando el prompt fuente es muy grande.
-- Speech.framework se drena antes de iniciar el prefill MLX; el recognition task se cancela y `AVAudioEngine` se resetea para liberar recursos rápidamente.
-- Memory warning cancela tanto conversación directa como salas antes de descargar el modelo de RAM.
-- Corregido un guardado duplicado de avatar.
-- Launch screen simplificado al sistema moderno `UILaunchScreen`; se elimina el storyboard legacy.
-- `Info.plist` es usado directamente por Xcode (`INFOPLIST_FILE`, `GENERATE_INFOPLIST_FILE=NO`).
-- Versión 3.1.1, build 311.
+## UI
+- Conserva el Composer Layout Fix que mantiene las cajas de texto visibles en Chat y Room.

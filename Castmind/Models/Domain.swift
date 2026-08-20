@@ -95,10 +95,10 @@ struct MemoryItem: Identifiable, Codable, Equatable, Sendable {
 // MARK: - Character
 
 struct GenerationSettings: Codable, Equatable, Sendable {
-    var temperature: Double = 0.62
-    var topP: Double = 0.88
-    var maxTokens: Int = 128
-    var recentContextMessages: Int = 6
+    var temperature: Double = 0.50
+    var topP: Double = 0.86
+    var maxTokens: Int = 112
+    var recentContextMessages: Int = 4
 
     static let `default` = GenerationSettings()
 }

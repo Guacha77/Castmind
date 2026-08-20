@@ -1,5 +1,6 @@
 import Foundation
 import HuggingFace
+import MLX
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -30,6 +31,13 @@ final class AIEngine: ObservableObject {
     private var modelContainer: ModelContainer?
     private var activeSession: ChatSession?
     private var warmedModelIDs = Set<String>()
+
+    init() {
+        // MLX keeps freed Metal buffers in a reuse pool. On iOS an unconstrained pool can grow
+        // to several GB across repeated turns and trigger jetsam even though the model itself fits.
+        // Keep a small reuse cache and aggressively release transient buffers after every turn.
+        MLX.Memory.cacheLimit = 32 * 1024 * 1024
+    }
 
     var isReady: Bool { modelContainer != nil && !isGenerating }
     var isGenerating: Bool { if case .generating = phase { return true }; return false }
@@ -79,20 +87,30 @@ final class AIEngine: ObservableObject {
         try await ensureReady(model: choice, warmup: warmup)
         guard let modelContainer else { throw EngineError.noModel }
 
-        // Hard preflight before MLX allocates the generation cache. PromptBudgeter normally keeps
-        // us below this ceiling, but imported characters / malformed data must fail gracefully
-        // instead of letting iOS terminate the process under memory pressure.
-        let combinedInput = systemPrompt + "\n" + prompt
-        if combinedInput.count > 8_000 {
-            let encodedInput = await modelContainer.encode(combinedInput)
-            let tokenCount = encodedInput.count
-            let safeLimit = PromptBudgeter.maxSafeInputTokens(for: choice)
-            guard tokenCount <= safeLimit else { throw EngineError.promptTooLarge(tokenCount, safeLimit) }
+        // Token-aware final fit before MLX allocates KV cache. The saved character prompt is never
+        // changed; only this one inference view is compacted if the phone would otherwise receive
+        // an unsafe context. This turns an OOM/crash into a bounded generation.
+        var effectiveSystemPrompt = systemPrompt
+        let safeLimit = PromptBudgeter.maxSafeInputTokens(for: choice)
+        for _ in 0..<3 {
+            let combinedInput = effectiveSystemPrompt + "\n" + prompt
+            guard combinedInput.count > 6_000 else { break }
+            let tokenCount = (await modelContainer.encode(combinedInput)).count
+            if tokenCount <= safeLimit { break }
+            let ratio = max(0.42, min(0.82, Double(safeLimit) / Double(max(tokenCount, 1))))
+            let target = Int(Double(effectiveSystemPrompt.count) * ratio * 0.90)
+            effectiveSystemPrompt = PromptBudgeter.compactSystemPrompt(effectiveSystemPrompt, targetCharacters: target)
+        }
+
+        let finalCombined = effectiveSystemPrompt + "\n" + prompt
+        if finalCombined.count > 6_000 {
+            let finalTokenCount = (await modelContainer.encode(finalCombined)).count
+            guard finalTokenCount <= safeLimit else { throw EngineError.promptTooLarge(finalTokenCount, safeLimit) }
         }
 
         let session = ChatSession(
             modelContainer,
-            instructions: systemPrompt,
+            instructions: effectiveSystemPrompt,
             generateParameters: parameters(from: generation),
             additionalContext: ["enable_thinking": false]
         )
@@ -137,11 +155,15 @@ final class AIEngine: ObservableObject {
             let tokPerSecond = approxTokens / (Double(totalMS) / 1000.0)
             let metrics = GenerationMetrics(firstTokenMS: firstMS, totalMS: totalMS, approximateTokensPerSecond: tokPerSecond)
             lastMetrics = metrics
+            await session.clear()
             activeSession = nil // release KV/cache state between turns to reduce peak memory
+            MLX.Memory.clearCache()
             phase = .ready
             return metrics
         } catch {
+            await session.clear()
             activeSession = nil
+            MLX.Memory.clearCache()
             phase = modelContainer == nil ? .idle : .ready
             throw error
         }
@@ -179,9 +201,15 @@ final class AIEngine: ObservableObject {
         let session = ChatSession(
             modelContainer,
             instructions: instructions,
-            generateParameters: GenerateParameters(maxTokens: 90, temperature: 0.25, topP: 0.85)
+            generateParameters: GenerateParameters(
+                maxTokens: 90, kvBits: 4, kvGroupSize: 64, quantizedKVStart: 0,
+                temperature: 0.25, topP: 0.85, prefillStepSize: 256
+            )
         )
-        return try await session.respond(to: prompt).trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await session.respond(to: prompt).trimmingCharacters(in: .whitespacesAndNewlines)
+        await session.clear()
+        MLX.Memory.clearCache()
+        return result
     }
 
     func benchmark(model choice: LocalModelChoice, warmup: Bool) async throws -> BenchmarkResult {
@@ -202,6 +230,8 @@ final class AIEngine: ObservableObject {
             chars += chunk.count
         }
         let end = Date()
+        await session.clear()
+        MLX.Memory.clearCache()
         let totalMS = max(1, milliseconds(from: start, to: end))
         return BenchmarkResult(
             modelID: choice.modelID,
@@ -213,16 +243,28 @@ final class AIEngine: ObservableObject {
     }
 
     func cancelGeneration() async {
-        if let activeSession { await activeSession.synchronize() }
+        if let activeSession {
+            await activeSession.synchronize()
+            await activeSession.clear()
+        }
         activeSession = nil
+        MLX.Memory.clearCache()
         if modelContainer != nil { phase = .ready }
     }
 
+    func releaseTransientMemory() {
+        MLX.Memory.clearCache()
+    }
+
     func unload() async {
-        if let activeSession { await activeSession.synchronize() }
+        if let activeSession {
+            await activeSession.synchronize()
+            await activeSession.clear()
+        }
         activeSession = nil
         modelContainer = nil
         activeModelID = nil
+        MLX.Memory.clearCache()
         phase = .idle
     }
 
@@ -247,6 +289,8 @@ final class AIEngine: ObservableObject {
             generateParameters: GenerateParameters(maxTokens: 3, temperature: 0.0, topP: 1.0)
         )
         _ = try await session.respond(to: "OK")
+        await session.clear()
+        MLX.Memory.clearCache()
         phase = .ready
     }
 
@@ -261,8 +305,15 @@ final class AIEngine: ObservableObject {
     private func parameters(from settings: GenerationSettings) -> GenerateParameters {
         GenerateParameters(
             maxTokens: settings.maxTokens,
+            kvBits: 4,
+            kvGroupSize: 64,
+            quantizedKVStart: 0,
             temperature: Float(settings.temperature),
-            topP: Float(settings.topP)
+            topP: Float(settings.topP),
+            minP: 0.02,
+            repetitionPenalty: 1.06,
+            repetitionContextSize: 64,
+            prefillStepSize: 256
         )
     }
 
